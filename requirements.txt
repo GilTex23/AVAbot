@@ -1,0 +1,9 @@
+aiogram>=3.0.0
+fastapi
+uvicorn
+sqlalchemy[asyncio]
+asyncpg
+python-dotenv
+beautifulsoup4
+aiohttp
+apscheduler
