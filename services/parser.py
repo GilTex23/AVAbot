@@ -130,28 +130,21 @@ async def get_updates():
 
 
 async def get_filtered(vo: str):
-    """Поиск и фильтрация обновлений"""
+    """
+    Возвращает СПИСОК аниме (list of dict), отфильтрованный по озвучке.
+    """
     updates = await get_updates()
 
     filtered_anime = []
     for anime in updates:
-        # Если выбрано "Все" или озвучка совпадает (регистронезависимо)
-        # logger.info(f"Voice Over: {vo}")
-        if vo == "Все" or vo.lower() == anime['studio'].lower().strip():
+        # Очистка названия студии от лишних пробелов для точного сравнения
+        anime_studio_clean = anime['studio'].strip().lower()
+        vo_clean = vo.strip().lower()
+
+        if vo == "Все" or vo_clean in anime_studio_clean or vo_clean == anime_studio_clean:
             filtered_anime.append(anime)
 
-    if filtered_anime:
-        text_lines = [f"🔥 <b>Свежие серии ({vo}):</b>\n"]
-        for anime in filtered_anime:
-            text_lines.append(
-                f"• <a href='{anime['link']}'>{anime['title']}</a> — {anime['episode']} ({anime['studio']})"
-            )
-
-        result_text = "\n".join(text_lines)
-    else:
-        result_text = f"😔 На данный момент свежих серий с озвучкой <b>{vo}</b> не найдено."
-
-    return result_text
+    return filtered_anime
 
 
 async def search_anime(query: str):

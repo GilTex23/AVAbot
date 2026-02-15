@@ -14,19 +14,19 @@ async def init_db():
 
 # --- USER ---
 async def get_user(tg_id: int):
-    """Получает пользователя или None"""
     async with async_session() as session:
         return await session.scalar(select(User).where(User.id == tg_id))
 
+
 async def add_user(tg_id: int, username: str):
-    """Создает пользователя, если нет. Возвращает True если создан, False если был."""
     async with async_session() as session:
         user = await session.scalar(select(User).where(User.id == tg_id))
         if not user:
-            session.add(User(id=tg_id, username=username, favorite_voiceover=None)) # Пока без озвучки
+            session.add(User(id=tg_id, username=username, favorite_voiceover=None))
             await session.commit()
             return True
         return False
+
 
 async def update_user_voiceover(tg_id: int, vo: str):
     async with async_session() as session:
@@ -45,14 +45,17 @@ async def get_user_voiceover(tg_id: int):
 
 
 # --- SUBSCRIPTIONS ---
-async def add_subscription(tg_id: int, title: str, url: str, last_ep: str):
+async def add_subscription(tg_id: int, title: str, url: str, last_ep: str, voiceover: str):
+    """Добавляет подписку с конкретной озвучкой"""
     async with async_session() as session:
-        # Исправляем warning: используем and_ или цепочку where
+        # Проверяем уникальность по URL И ОЗВУЧКЕ
+        # Человек может подписаться на одно аниме дважды с разной озвучкой
         existing = await session.scalar(
             select(Subscription).where(
                 and_(
                     Subscription.user_id == tg_id,
-                    Subscription.anime_url == url
+                    Subscription.anime_url == url,
+                    Subscription.voiceover == voiceover
                 )
             )
         )
@@ -63,16 +66,15 @@ async def add_subscription(tg_id: int, title: str, url: str, last_ep: str):
             user_id=tg_id,
             anime_title=title,
             anime_url=url,
-            last_episode=last_ep
+            last_episode=last_ep,
+            voiceover=voiceover
         ))
         await session.commit()
         return True
 
 
 async def get_all_subscriptions():
-    """Получить все подписки для чекера (с подгрузкой User)"""
     async with async_session() as session:
-        # join(User) нужен, чтобы потом обратиться к sub.user.favorite_voiceover
         result = await session.execute(select(Subscription).join(User))
         return result.scalars().all()
 
