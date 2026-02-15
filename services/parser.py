@@ -137,7 +137,7 @@ async def get_filtered(vo: str):
     for anime in updates:
         # Если выбрано "Все" или озвучка совпадает (регистронезависимо)
         logger.info(f"Voice Over: {vo}")
-        if vo == "Все" or vo.lower() in anime['studio'].lower():
+        if vo == "Все" or vo.lower() == anime['studio'].lower().strip():
             filtered_anime.append(anime)
 
     if filtered_anime:
