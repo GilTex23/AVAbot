@@ -13,35 +13,46 @@ router = Router()
 # --- СТАРТ И МЕНЮ ---
 @router.message(CommandStart())
 async def cmd_start(message: types.Message):
-    await db.add_user(message.from_user.id, message.from_user.username)
-    await message.answer(
-        f"!Привет, {message.from_user.first_name}! 👋\n"
-        "Я помогу тебе не пропустить выход новых серий.\n\n"
-        "1. Нажми <b>Поиск аниме</b>\n"
-        "2. Введи название\n"
-        "3. Выбери из списка, чтобы подписаться",
-        reply_markup=inline.main_menu(),
-        parse_mode="HTML"
-    )
+    # Пытаемся создать пользователя
+    is_new_user = await db.add_user(message.from_user.id, message.from_user.username)
+
+    user = await db.get_user(message.from_user.id)
+
+    # Если пользователь новый ИЛИ у него еще не выбрана озвучка (None)
+    if is_new_user or (user and not user.favorite_voiceover):
+        await message.answer(
+            f"Привет, {message.from_user.first_name}! 👋\n\n"
+            "Для начала работы выбери твою <b>любимую озвучку</b>.\n"
+            "Я буду показывать обновления именно для неё.",
+            reply_markup=inline.voiceover_selection("Не выбрано"),
+            parse_mode="HTML"
+        )
+    else:
+        # Если старый пользователь
+        await message.answer(
+            f"С возвращением, {message.from_user.first_name}! 👋\n"
+            "Чего желаешь?",
+            reply_markup=inline.main_menu(),
+            parse_mode="HTML"
+        )
 
 
 @router.callback_query(F.data == "back_home")
 async def cb_back_home(callback: types.CallbackQuery, state: FSMContext):
     await state.clear()
-    await callback.message.edit_text(
-        "Главное меню:",
-        reply_markup=inline.main_menu()
-    )
+    await callback.message.edit_text("Главное меню:", reply_markup=inline.main_menu())
 
 
-# --- НАСТРОЙКИ (Озвучка) ---
+# --- НАСТРОЙКИ ---
 @router.callback_query(F.data == "settings")
 async def cb_settings(callback: types.CallbackQuery):
-    user_vo = await db.get_user_voiceover(callback.from_user.id)
+    user = await db.get_user(callback.from_user.id)
+    vo = user.favorite_voiceover if user else "Не выбрано"
+
     await callback.message.edit_text(
-        f"Текущая любимая озвучка: <b>{user_vo}</b>\n"
-        "Бот будет присылать уведомления, только если выйдет серия в этой озвучке (или выбери 'Все').",
-        reply_markup=inline.voiceover_selection(user_vo),
+        f"Текущая любимая озвучка: <b>{vo}</b>\n"
+        "Выбери новую, чтобы получать уведомления по ней:",
+        reply_markup=inline.voiceover_selection(vo),
         parse_mode="HTML"
     )
 
@@ -49,9 +60,44 @@ async def cb_settings(callback: types.CallbackQuery):
 @router.callback_query(F.data.startswith("set_vo_"))
 async def cb_set_vo(callback: types.CallbackQuery):
     new_vo = callback.data.split("set_vo_")[1]
+
     await db.update_user_voiceover(callback.from_user.id, new_vo)
-    await callback.answer(f"✅ Озвучка изменена на {new_vo}")
-    await cb_settings(callback)
+
+    await callback.answer(f"✅ Озвучка выбрана: {new_vo}")
+
+    await callback.message.edit_text(
+        f"Озвучка <b>{new_vo}</b> сохранена!\n"
+        f"🔍 Загружаю последние серии с этой озвучкой...",
+        parse_mode="HTML"
+    )
+
+    updates = await parser.get_updates()
+
+    filtered_anime = []
+    for anime in updates:
+        # Если выбрано "Все" или озвучка совпадает (регистронезависимо)
+        if new_vo == "Все" or new_vo.lower() in anime['studio'].lower():
+            filtered_anime.append(anime)
+
+    if filtered_anime:
+        text_lines = [f"🔥 <b>Свежие серии ({new_vo}):</b>\n"]
+        for anime in filtered_anime[:15]:  # Ограничим 15 штуками, чтобы сообщение не было огромным
+            text_lines.append(
+                f"• <a href='{anime['link']}'>{anime['title']}</a> — {anime['episode']} ({anime['studio']})"
+            )
+
+        result_text = "\n".join(text_lines)
+    else:
+        result_text = f"😔 На данный момент свежих серий с озвучкой <b>{new_vo}</b> не найдено."
+
+    await callback.message.delete()
+
+    await callback.message.answer(
+        result_text,
+        reply_markup=inline.main_menu(),
+        parse_mode="HTML",
+        disable_web_page_preview=True
+    )
 
 
 # --- ПОИСК АНИМЕ (FSM) ---

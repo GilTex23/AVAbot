@@ -13,29 +13,35 @@ async def init_db():
 
 
 # --- USER ---
+async def get_user(tg_id: int):
+    """Получает пользователя или None"""
+    async with async_session() as session:
+        return await session.scalar(select(User).where(User.id == tg_id))
+
 async def add_user(tg_id: int, username: str):
+    """Создает пользователя, если нет. Возвращает True если создан, False если был."""
     async with async_session() as session:
         user = await session.scalar(select(User).where(User.id == tg_id))
         if not user:
-            session.add(User(id=tg_id, username=username))
+            session.add(User(id=tg_id, username=username, favorite_voiceover=None)) # Пока без озвучки
             await session.commit()
-
-
-async def get_user_voiceover(tg_id: int):
-    async with async_session() as session:
-        user = await session.scalar(select(User).where(User.id == tg_id))
-        return user.favorite_voiceover if user else "AniLibria"
-
+            return True
+        return False
 
 async def update_user_voiceover(tg_id: int, vo: str):
     async with async_session() as session:
-        # Используем явное условие
         await session.execute(
             update(User)
             .where(User.id == tg_id)
             .values(favorite_voiceover=vo)
         )
         await session.commit()
+
+
+async def get_user_voiceover(tg_id: int):
+    async with async_session() as session:
+        user = await session.scalar(select(User).where(User.id == tg_id))
+        return user.favorite_voiceover if user else "AniLiberty"
 
 
 # --- SUBSCRIPTIONS ---
