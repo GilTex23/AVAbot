@@ -16,7 +16,7 @@ logger = logging.getLogger(__name__)
 # --- ВСПОМОГАТЕЛЬНАЯ ФУНКЦИЯ ДЛЯ ВЫВОДА СПИСКА ---
 async def show_updates_for_vo(message: types.Message, state: FSMContext, vo: str):
     """Парсит, формирует текст и кнопки для добавления"""
-    msg = await message.edit_text(f"⏳ Загружаю обновления ({vo})...")
+    msg = await message.answer(f"⏳ Загружаю обновления ({vo})...")
 
     updates = await parser.get_filtered(vo)
 
@@ -163,7 +163,7 @@ async def cb_refresh(callback: types.CallbackQuery, state: FSMContext):
     data = await state.get_data()
     vo = data.get("current_vo", "AniLiberty")
     await callback.answer("Обновляю...")
-    # await
+    await callback.message.delete()
     await show_updates_for_vo(callback.message, state, vo)
 
 
