@@ -16,17 +16,17 @@ jobs:
           key: ${{ secrets.SSH_PRIVATE_KEY }}
           port: 22
           script: |
-            if [ ! -d "/home/${{ secrets.USERNAME }}/AVAbot" ]; then
-              mkdir -p /home/${{ secrets.USERNAME }}/AVAbot
-              git clone https://github.com/GilTex23/AVAbot.git /home/${{ secrets.USERNAME }}/AVAbot
+            cd /home/${{ secrets.USERNAME }}
+
+            if [ ! -d "AVAbot" ]; then
+              git clone https://github.com/GilTex23/AVAbot.git AVAbot
             fi
 
-            cd /home/${{ secrets.USERNAME }}/AVAbot
+            cd AVAbot
             
             git pull origin main
             
             docker compose down
-            
             docker compose up -d --build
             
             docker image prune -f
