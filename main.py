@@ -21,12 +21,14 @@ scheduler = AsyncIOScheduler()
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     # --- STARTUP ---
-    logger.info("Starting up...")
+    logger.info("––– Starting up... –––")
 
     await init_db()
 
     dp.include_router(admin.router)
+    logger.info("Admin router included successfully")
     dp.include_router(user.router)
+    logger.info("User router included successfully")
 
     webhook_info = await bot.get_webhook_info()
     expected_url = config.WEBHOOK_URL + config.WEBHOOK_PATH
@@ -35,6 +37,8 @@ async def lifespan(app: FastAPI):
             url=expected_url,
             drop_pending_updates=True
         )
+        logger.info("New webhook has been installed")
+    logger.info("Webhook ready")
 
     scheduler.add_job(check_updates, "interval", minutes=15, args=[bot])
     scheduler.start()
@@ -42,7 +46,7 @@ async def lifespan(app: FastAPI):
     yield
 
     # --- SHUTDOWN ---
-    logger.info("Shutting down...")
+    logger.info("––– Shutting down... –––")
     await bot.session.close()
     scheduler.shutdown()
 
