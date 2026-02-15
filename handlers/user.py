@@ -15,7 +15,7 @@ router = Router()
 async def cmd_start(message: types.Message):
     await db.add_user(message.from_user.id, message.from_user.username)
     await message.answer(
-        f"Привет, {message.from_user.first_name}! 👋\n"
+        f"!Привет, {message.from_user.first_name}! 👋\n"
         "Я помогу тебе не пропустить выход новых серий.\n\n"
         "1. Нажми <b>Поиск аниме</b>\n"
         "2. Введи название\n"
