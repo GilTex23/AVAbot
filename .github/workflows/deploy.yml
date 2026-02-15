@@ -1,0 +1,37 @@
+name: Deploy Bot
+
+on:
+  push:
+    branches: [ "main" ]
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Deploy via SSH
+        uses: appleboy/ssh-action@master
+        with:
+          host: ${{ secrets.HOST }}
+          username: ${{ secrets.USERNAME }}
+          key: ${{ secrets.SSH_PRIVATE_KEY }}
+          port: 22
+          script: |
+            # Переходим в папку (если её нет, создаем и клонируем)
+            if [ ! -d "/home/${{ secrets.USERNAME }}/anime_bot" ]; then
+              mkdir -p /home/${{ secrets.USERNAME }}/anime_bot
+              git clone https://github.com/ТВОЙ_НИК/ТВОЙ_РЕПО.git /home/${{ secrets.USERNAME }}/anime_bot
+            fi
+
+            cd /home/${{ secrets.USERNAME }}/anime_bot
+            
+            # Получаем свежий код
+            git pull origin main
+            
+            # Останавливаем старые контейнеры
+            docker compose down
+            
+            # Собираем и запускаем новые (в фоновом режиме -d)
+            docker compose up -d --build
+            
+            # Чистим мусор (старые образы)
+            docker image prune -f
