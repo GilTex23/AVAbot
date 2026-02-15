@@ -4,15 +4,18 @@ import logging
 import urllib.parse
 import asyncio
 import random
+import config
+
+SCRAPER_API_URL = 'https://api.scraperapi.com/'
 
 URL_MAIN = 'https://animego.me/'
 URL_SEARCH = 'https://animego.me/search/all?q='
 
+# Заголовки для имитации браузера
 HEADERS = {
     "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
     'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8',
     'Accept-Language': 'ru-RU,ru;q=0.9,en-US;q=0.8,en;q=0.7',
-    'Accept-Encoding': 'gzip, deflate',
     'Connection': 'keep-alive',
     'Upgrade-Insecure-Requests': '1',
     'Sec-Fetch-Dest': 'document',
@@ -26,24 +29,33 @@ logger = logging.getLogger(__name__)
 
 
 async def get_html(url: str, session: aiohttp.ClientSession = None):
-    """Получает HTML с сохранением кук"""
+    """
+    Получает HTML через ScraperAPI
+    """
     close_session = False
 
     if session is None:
-        # Создаем сессию с куками
-        session = aiohttp.ClientSession(headers=HEADERS)
+        session = aiohttp.ClientSession()
         close_session = True
 
     try:
-        async with session.get(url, timeout=aiohttp.ClientTimeout(total=30)) as response:
-            logger.info(f"Request to {url} - Status: {response.status}")
+        # Параметры для ScraperAPI
+        params = {
+            'api_key': config.SCRAPER_API_KEY,
+            'url': url.strip(),
+            'device_type': 'desktop',
+            'country_code': 'ru'
+        }
+
+        async with session.get(SCRAPER_API_URL, params=params, timeout=aiohttp.ClientTimeout(total=30)) as response:
+            logger.info(f"ScraperAPI request to {url} - Status: {response.status}")
 
             if response.status != 200:
                 try:
                     error_text = await response.text()
-                    logger.error(f"Status {response.status} for {url}")
+                    logger.error(f"ScraperAPI Status {response.status} for {url}")
                     logger.error(f"Response headers: {dict(response.headers)}")
-                    logger.error(f"Response text: {error_text[:500]}")  # первые 500 символов
+                    logger.error(f"Response text: {error_text[:500]}")
                 except Exception as e:
                     logger.error(f"Failed to get error text: {e}")
                 return None
@@ -65,11 +77,7 @@ async def get_updates():
     """
     Парсит главную страницу и возвращает список свежих серий.
     """
-    # Создаем сессию для сохранения кук между запросами
-    async with aiohttp.ClientSession(headers=HEADERS) as session:
-        # Добавляем небольшую задержку перед первым запросом
-        await asyncio.sleep(random.uniform(1, 3))
-
+    async with aiohttp.ClientSession() as session:
         html_text = await get_html(URL_MAIN, session)
         if not html_text:
             return []
@@ -114,8 +122,6 @@ async def get_updates():
                         'link': link
                     })
 
-                    await asyncio.sleep(random.uniform(0.1, 0.3))
-
             except Exception as e:
                 logger.warning(f"Error parsing item: {e}")
                 continue
@@ -128,10 +134,7 @@ async def search_anime(query: str):
     encoded_query = urllib.parse.quote(query)
     url = f"{URL_SEARCH}{encoded_query}"
 
-    # Создаем сессию для сохранения кук
-    async with aiohttp.ClientSession(headers=HEADERS) as session:
-        await asyncio.sleep(random.uniform(1, 2))
-
+    async with aiohttp.ClientSession() as session:
         html_text = await get_html(url, session)
 
         if not html_text:
@@ -140,8 +143,7 @@ async def search_anime(query: str):
         soup = bs(html_text, 'html.parser')
         results = []
 
-        # Логика поиска зависит от верстки страницы поиска.
-        # Обычно это .media-body или .animes-list-item
+        # Логика поиска зависит от верстки страницы поиска
         content_divs = soup.find_all('div', class_='media-body')
 
         for item in content_divs:
@@ -154,11 +156,7 @@ async def search_anime(query: str):
                 full_link = href if href.startswith('http') else 'https://animego.me' + href
                 title = link_tag.get_text(strip=True)
 
-                # Пытаемся найти номер последней серии в результатах поиска
                 last_ep = "0"
-
-                # Добавляем задержку
-                await asyncio.sleep(random.uniform(0.1, 0.2))
 
                 results.append({'title': title, 'url': full_link, 'last_ep': last_ep})
             except Exception as e:
@@ -166,25 +164,3 @@ async def search_anime(query: str):
                 continue
 
         return results[:10]
-
-
-# Дополнительная функция для проверки доступности сайта
-async def check_site_availability():
-    """Проверяет, доступен ли сайт"""
-    async with aiohttp.ClientSession(headers=HEADERS) as session:
-        try:
-            async with session.get(URL_MAIN, timeout=aiohttp.ClientTimeout(total=10)) as response:
-                logger.info(f"Site check - Status: {response.status}")
-                logger.info(f"Cookies: {list(session.cookie_jar)}")
-
-                if response.status == 200:
-                    return True
-                elif response.status == 500:
-                    logger.error("Site returned 500 error - likely blocked by DDOS-Guard")
-                    return False
-                else:
-                    logger.warning(f"Unexpected status: {response.status}")
-                    return False
-        except Exception as e:
-            logger.error(f"Site check failed: {e}")
-            return False
