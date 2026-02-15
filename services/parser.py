@@ -20,6 +20,8 @@ async def get_html(url: str):
             async with session.get(url, headers=HEADERS) as response:
                 if response.status != 200:
                     logger.error(f"Status {response.status} for {url}")
+                    logger.error(f"Response: {response}")
+                    logger.error(f"Text: {response.text()}")
                     return None
                 return await response.text()
         except Exception as e:
