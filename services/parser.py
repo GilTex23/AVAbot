@@ -136,12 +136,13 @@ async def get_filtered(vo: str):
     filtered_anime = []
     for anime in updates:
         # Если выбрано "Все" или озвучка совпадает (регистронезависимо)
+        logger.info(f"Voice Over: {vo}")
         if vo == "Все" or vo.lower() in anime['studio'].lower():
             filtered_anime.append(anime)
 
     if filtered_anime:
         text_lines = [f"🔥 <b>Свежие серии ({vo}):</b>\n"]
-        for anime in filtered_anime[:30]:  # 30 Позиций
+        for anime in filtered_anime:
             text_lines.append(
                 f"• <a href='{anime['link']}'>{anime['title']}</a> — {anime['episode']} ({anime['studio']})"
             )

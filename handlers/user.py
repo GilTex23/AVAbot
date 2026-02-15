@@ -31,8 +31,12 @@ async def cmd_start(message: types.Message):
         )
     else:
         vo = str(user.favorite_voiceover).strip()
-        updates = await parser.get_filtered(vo)
         await message.answer(
+            f"Загружаем свежие обновления от <b>{vo}</b>...",
+            parse_mode="HTML"
+        )
+        updates = await parser.get_filtered(vo)
+        await message.edit_text(
             updates,
             reply_markup=inline.main_menu(),
             parse_mode="HTML"
