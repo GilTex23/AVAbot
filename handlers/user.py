@@ -28,10 +28,9 @@ async def cmd_start(message: types.Message):
             parse_mode="HTML"
         )
     else:
-        # Если старый пользователь
+        updates = await parser.get_filtered(user.favorite_voiceover)
         await message.answer(
-            f"С возвращением, {message.from_user.first_name}! 👋\n"
-            "Чего желаешь?",
+            updates,
             reply_markup=inline.main_menu(),
             parse_mode="HTML"
         )
@@ -40,7 +39,9 @@ async def cmd_start(message: types.Message):
 @router.callback_query(F.data == "back_home")
 async def cb_back_home(callback: types.CallbackQuery, state: FSMContext):
     await state.clear()
-    await callback.message.edit_text("Главное меню:", reply_markup=inline.main_menu())
+    # await callback.message.edit_text("Главное меню:", reply_markup=inline.main_menu())
+    await callback.message.delete()
+    await cmd_start(callback.message)
 
 
 # --- НАСТРОЙКИ ---
@@ -71,29 +72,12 @@ async def cb_set_vo(callback: types.CallbackQuery):
         parse_mode="HTML"
     )
 
-    updates = await parser.get_updates()
-
-    filtered_anime = []
-    for anime in updates:
-        # Если выбрано "Все" или озвучка совпадает (регистронезависимо)
-        if new_vo == "Все" or new_vo.lower() in anime['studio'].lower():
-            filtered_anime.append(anime)
-
-    if filtered_anime:
-        text_lines = [f"🔥 <b>Свежие серии ({new_vo}):</b>\n"]
-        for anime in filtered_anime[:15]:  # Ограничим 15 штуками, чтобы сообщение не было огромным
-            text_lines.append(
-                f"• <a href='{anime['link']}'>{anime['title']}</a> — {anime['episode']} ({anime['studio']})"
-            )
-
-        result_text = "\n".join(text_lines)
-    else:
-        result_text = f"😔 На данный момент свежих серий с озвучкой <b>{new_vo}</b> не найдено."
+    updates = await parser.get_filtered(new_vo)
 
     await callback.message.delete()
 
     await callback.message.answer(
-        result_text,
+        updates,
         reply_markup=inline.main_menu(),
         parse_mode="HTML",
         disable_web_page_preview=True
