@@ -30,8 +30,8 @@ async def cmd_start(message: types.Message):
             parse_mode="HTML"
         )
     else:
-        logging.info(f"Type vo: {type(user.favorite_voiceover)}\nMsg: {user.favorite_voiceover}")
-        updates = await parser.get_filtered(user.favorite_voiceover)
+        vo = str(user.favorite_voiceover).strip()
+        updates = await parser.get_filtered(vo)
         await message.answer(
             updates,
             reply_markup=inline.main_menu(),
