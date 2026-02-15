@@ -18,7 +18,6 @@ async def show_updates_for_vo(message: types.Message, state: FSMContext, vo: str
     """Парсит, формирует текст и кнопки для добавления"""
     msg = await message.answer(f"⏳ Загружаю обновления ({vo})...")
 
-    # 1. Получаем список словарей
     updates = await parser.get_filtered(vo)
 
     if not updates:
@@ -29,18 +28,16 @@ async def show_updates_for_vo(message: types.Message, state: FSMContext, vo: str
         )
         return
 
-    # 2. Формируем красивый текст
+    # Формируем текст
     text_lines = [f"🔥 <b>Свежие серии ({vo}):</b>\n"]
     for i, anime in enumerate(updates):
-        # Нумерация для удобства
         text_lines.append(
-            f"{i + 1}. <a href='{anime['link']}'>{anime['title']}</a> — {anime['episode']}"
+            f"<b>{i + 1}.</b> <a href='{anime['link']}'>{anime['title']}</a> — {anime['episode']} <i>({anime['studio']})</i>"
         )
 
-    text_lines.append("\n<i>Нажми на кнопку ниже, чтобы добавить аниме в любимые с этой озвучкой.</i>")
+    text_lines.append("\n<i>Нажми на номер ниже, чтобы добавить аниме в любимые.</i>")
     result_text = "\n".join(text_lines)
 
-    # 3. Сохраняем список и текущую озвучку в FSM, чтобы при клике на кнопку знать, что добавлять
     await state.update_data(current_updates=updates, current_vo=vo)
     await state.set_state(UpdatesState.viewing_list)
 
@@ -118,16 +115,13 @@ async def cb_handle_vo_selection(callback: types.CallbackQuery, state: FSMContex
     # data format: set_vo_{mode}_{vo}
     parts = callback.data.split("_")
     mode = parts[2]  # save или view
-    vo = parts[3]  # Название озвучки (может содержать пробелы, аккуратнее)
+    vo = parts[3]
 
-    # Если в названии озвучки есть пробелы (Dream Cast), split сработает некорректно.
-    # Лучше восстановить строку:
     vo = callback.data.replace(f"set_vo_{mode}_", "")
 
     if mode == "save":
         await db.update_user_voiceover(callback.from_user.id, vo)
         await callback.answer(f"✅ Настройки обновлены: {vo}")
-        # После сохранения показываем меню
         await callback.message.edit_text("Главное меню:", reply_markup=inline.main_menu())
 
     elif mode == "view":
@@ -139,31 +133,27 @@ async def cb_handle_vo_selection(callback: types.CallbackQuery, state: FSMContex
 # --- ДОБАВЛЕНИЕ В ИЗБРАННОЕ ИЗ СПИСКА (FSM) ---
 @router.callback_query(F.data.startswith("add_from_list_"), StateFilter(UpdatesState.viewing_list))
 async def cb_add_from_list(callback: types.CallbackQuery, state: FSMContext):
-    # Получаем индекс нажатой кнопки
     idx = int(callback.data.split("_")[-1])
-
-    # Получаем сохраненные данные из состояния
     data = await state.get_data()
     updates = data.get("current_updates", [])
-    current_vo = data.get("current_vo", "Unknown")
+
+    anime = updates[idx]
+    vo_to_save = anime['studio']
 
     if not updates or idx >= len(updates):
         await callback.answer("⚠️ Данные устарели. Обновите список.", show_alert=True)
         return
 
-    anime = updates[idx]
-
-    # Добавляем в БД
     success = await db.add_subscription(
         tg_id=callback.from_user.id,
         title=anime['title'],
         url=anime['link'],
         last_ep=anime['episode'],
-        voiceover=current_vo  # Важно! Добавляем с той озвучкой, список которой смотрели
+        voiceover=vo_to_save
     )
 
     if success:
-        await callback.answer(f"✅ Добавлено: {anime['title']} ({current_vo})", show_alert=False)
+        await callback.answer(f"✅ Добавлено: {anime['title']} ({vo_to_save})", show_alert=False)
     else:
         await callback.answer("⚠️ Вы уже подписаны на это аниме с этой озвучкой", show_alert=True)
 

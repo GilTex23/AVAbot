@@ -32,23 +32,29 @@ def voiceover_selection(current_vo: str, mode: str = "save"):
 
 def updates_list_actions(anime_list: list):
     """
-    Генерирует кнопки для добавления аниме из списка обновлений.
-    Кнопки будут: [Добавить №1], [Добавить №2] ...
+    Генерирует компактные кнопки-цифры: [1] [2] [3] [4] [5]
     """
     kb = InlineKeyboardBuilder()
 
-    # Создаем кнопки для каждого аниме в списке (по индексу)
-    for index, anime in enumerate(anime_list):
-        # Ограничим название, чтобы кнопка не была гигантской
-        short_title = anime['title'][:15] + "..." if len(anime['title']) > 15 else anime['title']
+    # Создаем кнопки только с цифрами
+    for index in range(len(anime_list)):
         kb.button(
-            text=f"➕ {short_title}",
+            text=str(index + 1),
             callback_data=f"add_from_list_{index}"
         )
 
-    kb.adjust(1)  # Кнопки в столбик
-    kb.button(text="🔄 Обновить", callback_data="refresh_updates")
-    kb.button(text="🔙 В меню", callback_data="back_home")
+    # Делаем сетку по 5 кнопок в ряд (или 8, если названия короткие, но 5 оптимально для мобилок)
+    kb.adjust(5)
+
+    # Добавляем кнопки управления отдельным блоком, чтобы они были внизу во всю ширину
+    control_kb = InlineKeyboardBuilder()
+    control_kb.button(text="🔄 Обновить", callback_data="refresh_updates")
+    control_kb.button(text="🔙 В меню", callback_data="back_home")
+    control_kb.adjust(2)
+
+    # Прикрепляем кнопки управления к цифровой клавиатуре
+    kb.attach(control_kb)
+
     return kb.as_markup()
 
 
