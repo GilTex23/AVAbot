@@ -6,9 +6,11 @@ from database import requests as db
 from keyboards import inline
 from services import parser
 from utils.states import SearchState
+import logging
 
 router = Router()
 
+logger = logging.getLogger(__name__)
 
 # --- СТАРТ И МЕНЮ ---
 @router.message(CommandStart())
@@ -28,6 +30,7 @@ async def cmd_start(message: types.Message):
             parse_mode="HTML"
         )
     else:
+        logging.info(f"Type vo: {type(user.favorite_voiceover)}\nMsg: {user.favorite_voiceover}")
         updates = await parser.get_filtered(user.favorite_voiceover)
         await message.answer(
             updates,

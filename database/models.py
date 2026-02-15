@@ -13,7 +13,7 @@ class User(Base):
 
     id = Column(BigInteger, primary_key=True)  # Telegram ID
     username = Column(String, nullable=True)
-    favorite_voiceover = Column(String, default="AniLibria")  # Любимая озвучка по умолчанию
+    favorite_voiceover = Column(String, default="AniLiberty")  # Любимая озвучка по умолчанию
     registered_at = Column(DateTime, default=datetime.datetime.utcnow)
 
     subscriptions = relationship("Subscription", back_populates="user", cascade="all, delete-orphan")
