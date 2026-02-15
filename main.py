@@ -39,7 +39,7 @@ async def lifespan(app: FastAPI):
     scheduler.add_job(check_updates, "interval", minutes=15, args=[bot])
     scheduler.start()
 
-    yield  # Приложение работает здесь
+    yield
 
     # --- SHUTDOWN ---
     logger.info("Shutting down...")
