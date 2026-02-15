@@ -16,7 +16,6 @@ jobs:
           key: ${{ secrets.SSH_PRIVATE_KEY }}
           port: 22
           script: |
-            # Переходим в папку (если её нет, создаем и клонируем)
             if [ ! -d "/home/${{ secrets.USERNAME }}/AVAbot" ]; then
               mkdir -p /home/${{ secrets.USERNAME }}/AVAbot
               git clone https://github.com/GilTex23/AVAbot.git /home/${{ secrets.USERNAME }}/AVAbot
@@ -24,14 +23,10 @@ jobs:
 
             cd /home/${{ secrets.USERNAME }}/AVAbot
             
-            # Получаем свежий код
             git pull origin main
             
-            # Останавливаем старые контейнеры
             docker compose down
             
-            # Собираем и запускаем новые (в фоновом режиме -d)
             docker compose up -d --build
             
-            # Чистим мусор (старые образы)
             docker image prune -f

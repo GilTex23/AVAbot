@@ -10,7 +10,7 @@ def main_menu():
     return kb.as_markup()
 
 def voiceover_selection(current_vo: str):
-    vos = ['AniLibria', 'AniDUB', 'Dream Cast', 'SHIZA Project', 'Субтитры', 'Все']
+    vos = ['AniLiberty', 'AniDUB', 'Dream Cast', 'SHIZA Project', 'Субтитры', 'Все']
     kb = InlineKeyboardBuilder()
     for vo in vos:
         text = f"✅ {vo}" if vo == current_vo else vo
