@@ -17,12 +17,12 @@ jobs:
           port: 22
           script: |
             # Переходим в папку (если её нет, создаем и клонируем)
-            if [ ! -d "/home/${{ secrets.USERNAME }}/anime_bot" ]; then
-              mkdir -p /home/${{ secrets.USERNAME }}/anime_bot
-              git clone https://github.com/ТВОЙ_НИК/ТВОЙ_РЕПО.git /home/${{ secrets.USERNAME }}/anime_bot
+            if [ ! -d "/home/${{ secrets.USERNAME }}/AVAbot" ]; then
+              mkdir -p /home/${{ secrets.USERNAME }}/AVAbot
+              git clone https://github.com/GilTex23/AVAbot.git /home/${{ secrets.USERNAME }}/AVAbot
             fi
 
-            cd /home/${{ secrets.USERNAME }}/anime_bot
+            cd /home/${{ secrets.USERNAME }}/AVAbot
             
             # Получаем свежий код
             git pull origin main
