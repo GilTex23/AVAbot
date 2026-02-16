@@ -43,7 +43,6 @@ async def check_updates(bot: Bot):
                     # 1. Озвучка совпадает с любимой озвучкой пользователя
                     # 2. Эта серия еще не была отправлена (или она новее)
 
-
                     is_new_episode = sub.last_episode != update['episode']
                     is_target_vo = (user_vo.lower() in update['studio'].lower()) or (user_vo == "Все")
 
@@ -62,9 +61,7 @@ async def check_updates(bot: Bot):
                             )
                             logger.info(f"Notification sent to {sub.user_id} for {update['title']}")
 
-                            # Обновляем запись в БД, чтобы не спамить
-                            # Внимание: обновляем last_episode в базе
-                            # (реализация update_sub_last_episode нужна в requests.py)
+                            # Обновляем запись в БД
                             await db.update_sub_last_episode(sub.id, update['episode'])
 
                         except Exception as e:
@@ -72,13 +69,10 @@ async def check_updates(bot: Bot):
     except Exception as e:
         antispam.failed_requests += 1
         logger.error(f"Checker error: {e}")
-        try:
-            if not antispam.is_notified():
-                await notify_admins(
-                    bot,
-                    f"Failed requests: {antispam.failed_requests}\nОшибка в модуле проверки обновлений (Checker):\n<code>{str(e)}</code>",
-                    level="ERROR"
-                )
-                antispam.set_notify_timestamp()
-        except Exception as e:
-            logger.error(f"Admin Notification Error: {e}")
+        if not antispam.is_notified():
+            await notify_admins(
+                bot,
+                f"Failed requests: {antispam.failed_requests}\nОшибка в модуле проверки обновлений (Checker):\n<code>{str(e)}</code>",
+                level="ERROR"
+            )
+            antispam.set_notify_timestamp()

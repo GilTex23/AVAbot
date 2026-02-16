@@ -54,18 +54,15 @@ async def get_html(url: str, session: aiohttp.ClientSession = None, bot: Bot=Non
             else:
                 antispam.failed_requests += 1
                 logger.critical(f"All your API keys are exhausted or invalid!\nPlease check logs and your API keys.\nFailed requests until restart: {antispam.failed_requests}")
-                try:
-                    if not antispam.is_notified():
-                        await notify_admins(
-                            bot,
-                            "Все API ключи ScraperAPI исчерпаны или недействительны!\n\n"
-                            "Парсинг аниме временно недоступен.\n"
-                            "Необходимо добавить новые ключи в конфигурацию.",
-                            level="CRITICAL"
-                        )
-                        antispam.set_notify_timestamp()
-                except Exception as e:
-                    logger.error(f"Admin Notification Error: {e}")
+                if not antispam.is_notified():
+                    await notify_admins(
+                        bot,
+                        "Все API ключи ScraperAPI исчерпаны или недействительны!\n\n"
+                        "Парсинг аниме временно недоступен.\n"
+                        "Необходимо добавить новые ключи в конфигурацию.",
+                        level="CRITICAL"
+                    )
+                    antispam.set_notify_timestamp()
                 return None
             params = {
                 'api_key': api_key[1],
