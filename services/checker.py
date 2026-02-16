@@ -17,15 +17,16 @@ async def check_updates(bot: Bot):
         # 1. Получаем свежие данные с сайта
         updates = await get_updates()
         if not updates:
+            logger.warning("Updates wasn't handled")
             return
 
         # 2. Получаем все подписки из БД
         subscriptions = await db.get_all_subscriptions()
         if not subscriptions:
-            logger.info("Subscriptions empty.")
+            logger.info("Subscriptions empty")
             return
 
-        logger.info(f"Subscriptions handled: {subscriptions.count()}")
+        logger.info(f"Subscriptions handled: {len(subscriptions)}")
 
         # 3. Сопоставляем
         for sub in subscriptions:
@@ -75,7 +76,7 @@ async def check_updates(bot: Bot):
             if not antispam.is_notified():
                 await notify_admins(
                     bot,
-                    f"Ошибка в модуле проверки обновлений (Checker):\n<code>{str(e)}</code>",
+                    f"Failed requests: {antispam.failed_requests}\nОшибка в модуле проверки обновлений (Checker):\n<code>{str(e)}</code>",
                     level="ERROR"
                 )
                 antispam.set_notify_timestamp()
