@@ -8,6 +8,7 @@ from random import choice
 import config
 from aiogram import Bot
 from services.notifier import notify_admins
+from utils.antispam import AntiSpamNotify
 
 
 SCRAPER_API_URL = 'https://api.scraperapi.com/'
@@ -30,34 +31,7 @@ HEADERS = {
 
 logger = logging.getLogger(__name__)
 
-class ApiExhaustedAntiSpamNotify:
-    def __init__(self):
-        self.__last_notify_timestamp = None
-        self.__failed_requests = 0
-
-    def is_notified(self):
-        if self.__last_notify_timestamp:
-            passed_ = datetime.datetime.now() - self.__last_notify_timestamp
-            if passed_.days == 0:
-                return True
-        return False
-
-    def set_notify_timestamp(self):
-        self.__last_notify_timestamp = datetime.datetime.now()
-
-    @property
-    def failed_requests(self):
-        return self.__failed_requests
-
-    @failed_requests.setter
-    def failed_requests(self, value):
-        if value > 0:
-            self.__failed_requests += value
-        else:
-            logger.error(f"ValueError in failed_requests.setter. Value: {value}")
-
-
-antispam = ApiExhaustedAntiSpamNotify()
+antispam = AntiSpamNotify(logger)
 
 
 async def get_html(url: str, session: aiohttp.ClientSession = None, bot: Bot=None):
