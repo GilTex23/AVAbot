@@ -6,15 +6,14 @@ from apscheduler.schedulers.asyncio import AsyncIOScheduler
 
 import config
 from loader import bot, dp
-from handlers import user, admin
+from handlers import user, admin, other
 from services.logger import setup_logger
 from services.checker import check_updates
+from services.notifier import notify_admins
 from database.requests import init_db
 
-# Настройка логгера
 logger = setup_logger(config.LOG_LEVEL)
 
-# Планировщик задач
 scheduler = AsyncIOScheduler()
 
 
@@ -29,6 +28,8 @@ async def lifespan(app: FastAPI):
     logger.info("Admin router included successfully")
     dp.include_router(user.router)
     logger.info("User router included successfully")
+    dp.include_router(other.router)
+    logger.info("Other router included successfully")
 
     webhook_info = await bot.get_webhook_info()
     expected_url = config.WEBHOOK_URL + config.WEBHOOK_PATH
@@ -43,10 +44,13 @@ async def lifespan(app: FastAPI):
     scheduler.add_job(check_updates, "interval", minutes=15, args=[bot])
     scheduler.start()
 
+    await notify_admins(bot, "Бот успешно запущен и готов к работе!", level="INFO")
+
     yield
 
     # --- SHUTDOWN ---
     logger.info("––– Shutting down... –––")
+    await notify_admins(bot, "Бот останавливается (Shutdown signal)", level="WARNING")
     await bot.session.close()
     scheduler.shutdown()
 
