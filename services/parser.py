@@ -1,17 +1,20 @@
+import datetime
 import aiohttp
 from bs4 import BeautifulSoup as bs
 import logging
 import urllib.parse
 import asyncio
-import random
+from random import choice
 import config
+from aiogram import Bot
+from services.notifier import notify_admins
+
 
 SCRAPER_API_URL = 'https://api.scraperapi.com/'
 
 URL_MAIN = 'https://animego.me/'
 URL_SEARCH = 'https://animego.me/search/all?q='
 
-# Заголовки для имитации браузера
 HEADERS = {
     "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
     'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8',
@@ -27,8 +30,37 @@ HEADERS = {
 
 logger = logging.getLogger(__name__)
 
+class ApiExhaustedAntiSpamNotify:
+    def __init__(self):
+        self.__last_notify_timestamp = None
+        self.__failed_requests = 0
 
-async def get_html(url: str, session: aiohttp.ClientSession = None):
+    def is_notified(self):
+        if self.__last_notify_timestamp:
+            passed_ = datetime.datetime.now() - self.__last_notify_timestamp
+            if passed_.days == 0:
+                return True
+        return False
+
+    def set_notify_timestamp(self):
+        self.__last_notify_timestamp = datetime.datetime.now()
+
+    @property
+    def failed_requests(self):
+        return self.__failed_requests
+
+    @failed_requests.setter
+    def failed_requests(self, value):
+        if value > 0:
+            self.__failed_requests += value
+        else:
+            logger.error(f"ValueError in failed_requests.setter. Value: {value}")
+
+
+antispam = ApiExhaustedAntiSpamNotify()
+
+
+async def get_html(url: str, session: aiohttp.ClientSession = None, bot: Bot=None):
     """
     Получает HTML через ScraperAPI
     """
@@ -38,39 +70,92 @@ async def get_html(url: str, session: aiohttp.ClientSession = None):
         session = aiohttp.ClientSession()
         close_session = True
 
-    try:
-        # Параметры для ScraperAPI
-        params = {
-            'api_key': config.SCRAPER_API_KEY,
-            'url': url.strip(),
-            'device_type': 'desktop',
-            'country_code': 'ru'
-        }
-
-        async with session.get(SCRAPER_API_URL, params=params, timeout=aiohttp.ClientTimeout(total=30)) as response:
-            logger.info(f"ScraperAPI request to {url} - Status: {response.status}")
-
-            if response.status != 200:
+    api_keys = config.SCRAPER_API_KEYS.copy()
+    attempt = 1
+    check_attempt = lambda x_: True if x_ <= 7 else False
+    while True:
+        try:
+            if api_keys:
+                api_key = choice(api_keys)
+            else:
+                antispam.failed_requests += 1
+                logger.critical(f"All your API keys are exhausted or invalid!\nPlease check logs and your API keys.\nFailed requests until restart: {antispam.failed_requests}")
                 try:
-                    error_text = await response.text()
-                    logger.error(f"ScraperAPI Status {response.status} for {url}")
-                    logger.error(f"Response headers: {dict(response.headers)}")
-                    logger.error(f"Response text: {error_text[:500]}")
+                    if not antispam.is_notified():
+                        await notify_admins(
+                            bot,
+                            "Все API ключи ScraperAPI исчерпаны или недействительны!\n\n"
+                            "Парсинг аниме временно недоступен.\n"
+                            "Необходимо добавить новые ключи в конфигурацию.",
+                            level="CRITICAL"
+                        )
+                        antispam.set_notify_timestamp()
                 except Exception as e:
-                    logger.error(f"Failed to get error text: {e}")
+                    logger.error(f"Admin Notification Error: {e}")
                 return None
+            params = {
+                'api_key': api_key[1],
+                'url': url.strip(),
+                'device_type': 'desktop',
+                'country_code': 'ru'
+            }
+            async with session.get(SCRAPER_API_URL, params=params, timeout=aiohttp.ClientTimeout(total=30)) as response:
+                logger.info(f"ScraperAPI request to {url} - Status: {response.status} - Used API name: {api_key[0]}")
+                if response.status == 200:
+                    pass
+                elif response.status in [500, 404, 429, 400, 403, 401]:
+                    if check_attempt(attempt):
+                        if response.status == 500:
+                            logger.error(f"Request failed. It's worth checking the URL - Attempt {attempt}")
+                            attempt += 1
+                            await asyncio.sleep(1)
+                            continue
+                        elif response.status == 404:
+                            logger.error(f"Bad Gateway - The requested page does not exist - Attempt {attempt}")
+                            attempt += 5
+                            await asyncio.sleep(0.3)
+                            continue
+                        elif response.status == 429:
+                            logger.error(f"To many concurrent requests - Attempt {attempt}")
+                            attempt += 1
+                            await asyncio.sleep(0.3)
+                            continue
+                        elif response.status == 400:
+                            logger.error(f"Error, invalid request. Make sure that your URL is entered correctly - Attempt {attempt}")
+                            attempt += 5
+                            await asyncio.sleep(0.5)
+                        elif response.status == 403:
+                            logger.error(f"API limit exceeded - API Name: {api_key[0]}")
+                            api_keys.remove(api_key)
+                            attempt += 1
+                            await asyncio.sleep(0.1)
+                            continue
+                        elif response.status == 401:
+                            logger.error(f"An unauthorized request. Please make sure that your API key \"{api_key[0]}\" is valid.")
+                            api_keys.remove(api_key)
+                            await asyncio.sleep(0.1)
+                            continue
+                else:
+                    try:
+                        error_text = await response.text()
 
-            return await response.text()
+                        logger.error(f"Response headers: {dict(response.headers)}")
+                        logger.error(f"Response text: {error_text[:900]}")
+                    except Exception as e:
+                        logger.error(f"Failed to get error text: {e}")
+                    return None
 
-    except asyncio.TimeoutError:
-        logger.error(f"Timeout error for {url}")
-        return None
-    except Exception as e:
-        logger.error(f"Network error for {url}: {e}")
-        return None
-    finally:
-        if close_session:
-            await session.close()
+                return await response.text()
+
+        except asyncio.TimeoutError:
+            logger.error(f"Timeout error for {url}")
+            return None
+        except Exception as e:
+            logger.error(f"Network error for {url}: {e}")
+            return None
+        finally:
+            if close_session:
+                await session.close()
 
 
 async def get_updates():
