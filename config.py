@@ -9,4 +9,9 @@ DATABASE_URL = os.getenv("DATABASE_URL")
 WEBHOOK_URL = os.getenv("WEBHOOK_URL")
 WEBHOOK_PATH = os.getenv("WEBHOOK_PATH")
 LOG_LEVEL = os.getenv("LOG_LEVEL", "INFO")
-SCRAPER_API_KEY = os.getenv('SCRAPER_API_KEY')
+
+api_keys_ = [key_.split('-') for key_ in [key_.strip() for key_ in os.getenv('SCRAPER_API_KEYS', '').split(',') if key_] if key_]
+if api_keys_:
+    SCRAPER_API_KEYS = api_keys_
+else:
+    raise ValueError("At least one argument of SCRAPER_API_KEYS is required. Format: NAME–API_KEY, NAME2–API_KEY, ...")
