@@ -4,8 +4,10 @@ from services.notifier import notify_admins
 from database import requests as db
 from database.models import User
 import logging
+from utils.antispam import AntiSpamNotify
 
 logger = logging.getLogger(__name__)
+antispam = AntiSpamNotify(logger)
 
 
 async def check_updates(bot: Bot):
@@ -20,7 +22,10 @@ async def check_updates(bot: Bot):
         # 2. Получаем все подписки из БД
         subscriptions = await db.get_all_subscriptions()
         if not subscriptions:
+            logger.info("Subscriptions empty.")
             return
+
+        logger.info(f"Subscriptions handled: {subscriptions.count()}")
 
         # 3. Сопоставляем
         for sub in subscriptions:
@@ -64,9 +69,15 @@ async def check_updates(bot: Bot):
                         except Exception as e:
                             logger.error(f"Failed to send message to {sub.user_id}: {e}")
     except Exception as e:
+        antispam.failed_requests += 1
         logger.error(f"Checker error: {e}")
-        await notify_admins(
-            bot,
-            f"Ошибка в модуле проверки обновлений (Checker):\n<code>{str(e)}</code>",
-            level="ERROR"
-        )
+        try:
+            if not antispam.is_notified():
+                await notify_admins(
+                    bot,
+                    f"Ошибка в модуле проверки обновлений (Checker):\n<code>{str(e)}</code>",
+                    level="ERROR"
+                )
+                antispam.set_notify_timestamp()
+        except Exception as e:
+            logger.error(f"Admin Notification Error: {e}")
