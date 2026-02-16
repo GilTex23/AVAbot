@@ -3,6 +3,7 @@ from dotenv import load_dotenv
 import logging
 
 logger = logging.getLogger(__name__)
+
 try:
     load_dotenv()
     logger.info("The virtual environment is loaded")
