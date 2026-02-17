@@ -78,7 +78,9 @@ def subs_list_actions(subscriptions: list):
         )
 
     kb.adjust(5)
-    kb.button(text="🔙 Назад", callback_data="back_home")
+    control_kb = InlineKeyboardBuilder()
+    control_kb.button(text="🔙 Назад", callback_data="back_home")
+    kb.attach(control_kb)
     return kb.as_markup()
 
 

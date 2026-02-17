@@ -32,7 +32,7 @@ async def show_updates_for_vo(message: types.Message, state: FSMContext, vo: str
     text_lines = [f"🔥 <b>Свежие серии ({vo}):</b>\n"]
     for i, anime in enumerate(updates):
         text_lines.append(
-            f"<b>{i + 1}.</b> <a href='{anime['link']}'>{anime['title']}</a>\n{anime['episode']} <i>({anime['studio']})</i>"
+            f"<b>{i + 1}.</b> <a href='{anime['link']}'>{anime['title']}</a>\n<b>{anime['episode']}</b> <i>({anime['studio']})</i>"
         )
 
     text_lines.append("\n<i>Нажми на номер ниже, чтобы добавить аниме в любимые.</i>")
@@ -64,8 +64,9 @@ async def cmd_start(message: types.Message, state: FSMContext):
         )
     else:
         await message.answer(
-            "Главное меню:",
-            reply_markup=inline.main_menu()
+            "<b>Главное меню:</b>",
+            reply_markup=inline.main_menu(),
+            parse_mode="HTML"
         )
 
 
@@ -174,7 +175,7 @@ async def cb_add_from_list(callback: types.CallbackQuery, state: FSMContext):
         url=anime['link'],
         last_ep=anime['episode'],
         voiceover=anime['studio'],
-        total_eps=info['total_episodes']  # Сохраняем всего серий
+        total_eps=info['total_episodes']
     )
 
     if success:
