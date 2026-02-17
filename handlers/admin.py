@@ -79,7 +79,7 @@ async def cb_server(callback: types.CallbackQuery):
         f"🖥 <b>Состояние сервера:</b>\n\n"
         f"🧠 CPU: {cpu}%\n"
         f"💾 RAM: {ram.percent}% ({ram.used // 1024 // 1024}MB / {ram.total // 1024 // 1024}MB)\n"
-        f"💿 Disk: {disk.percent}% ({disk.free // 1024 // 1024 // 1024}GB free)"
+        f"💿 Disk: {disk.percent}% ({disk.free // 1024 // 1024 // 1024}/{disk.used // 1024 // 1024 // 1024}GB free)"
     )
     await callback.message.edit_text(text, reply_markup=admin_kb.back_to_admin(), parse_mode="HTML")
 
