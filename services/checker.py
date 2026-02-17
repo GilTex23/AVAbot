@@ -44,7 +44,7 @@ async def check_updates(bot: Bot):
 
                         # Числовое сравнение серий
                         old_ep_num = extract_episode_number(sub.last_episode)
-                        new_ep_num = extract_episode_number(update['episode'])
+                        new_ep_num = int(extract_episode_number(update['episode']))
 
                         if new_ep_num > old_ep_num:
                             total_str = sub.total_episodes if sub.total_episodes else "?"
@@ -55,8 +55,8 @@ async def check_updates(bot: Bot):
                                     text=(
                                         f"🔥 <b>Новая серия!</b>\n\n"
                                         f"📺 <b>{update['title']}</b>\n"
-                                        f"🎬 Серия: {new_ep_num} из {total_str}\n"
-                                        f"🎙 Озвучка: {update['studio']}\n\n"
+                                        f"🎬 <b>Серия:</b> {new_ep_num} из {total_str}\n"
+                                        f"🎙 <b>Озвучка:</b> {update['studio']}\n\n"
                                         f"🔗 <a href='{update['link']}'>Смотреть</a>"
                                     ),
                                     parse_mode="HTML"
