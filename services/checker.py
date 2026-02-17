@@ -1,78 +1,124 @@
 from aiogram import Bot
-from services.parser import get_updates
+from services import parser
 from services.notifier import notify_admins
-from database import requests as db
-from database.models import User
-import logging
 from utils.antispam import AntiSpamNotify
+from database import requests as db
+import logging
+import re
+
 
 logger = logging.getLogger(__name__)
-antispam = AntiSpamNotify(logger)
+antispam_updates = AntiSpamNotify(logger)
+
+
+def extract_episode_number(ep_str: str) -> float:
+    """Извлекает номер серии (float) из строки 'Серия 5' или 'Серия 6.5'"""
+    if not ep_str: return 0
+    # Ищем числа (включая дробные)
+    match = re.search(r"(\d+(\.\d+)?)", ep_str)
+    return float(match.group(1)) if match else 0
 
 
 async def check_updates(bot: Bot):
     try:
         logger.debug("Starting anime check cycle...")
 
-        # 1. Получаем свежие данные с сайта
-        updates = await get_updates(bot)
-        if not updates:
-            logger.warning("Updates wasn't handled")
-            return
+        updates = await parser.get_updates(bot)
+        if not updates: return
 
-        # 2. Получаем все подписки из БД
         subscriptions = await db.get_all_subscriptions()
-        if not subscriptions:
-            logger.info("Subscriptions empty")
-            return
+        if not subscriptions: return
 
-        logger.info(f"Subscriptions handled: {len(subscriptions)}")
-
-        # 3. Сопоставляем
         for sub in subscriptions:
-            # Для каждой подписки ищем совпадение в обновлениях
             for update in updates:
-                # Сравниваем URL или Название (URL надежнее)
+                # Сравниваем URL
                 if sub.anime_url == update['link']:
 
-                    # Получаем пользователя (lazy load) для проверки любимой озвучки
-                    # В SQLAlchemy async это требует предварительной подгрузки в запросе (см. db.get_all_subscriptions)
-                    user_vo = sub.user.favorite_voiceover
+                    # Проверка озвучки
+                    user_vo = sub.voiceover
 
-                    # Проверяем условия:
-                    # 1. Озвучка совпадает с любимой озвучкой пользователя
-                    # 2. Эта серия еще не была отправлена (или она новее)
+                    studio_clean = update['studio'].strip().lower()
+                    vo_clean = user_vo.strip().lower()
 
-                    is_new_episode = sub.last_episode != update['episode']
-                    is_target_vo = (user_vo.lower() in update['studio'].lower()) or (user_vo == "Все")
+                    if user_vo == "Все" or vo_clean in studio_clean:
 
-                    if is_new_episode and is_target_vo:
-                        try:
-                            await bot.send_message(
-                                chat_id=sub.user_id,
-                                text=(
-                                    f"🔥 <b>Новая серия!</b>\n\n"
-                                    f"📺 <b>{update['title']}</b>\n"
-                                    f"🎬 {update['episode']}\n"
-                                    f"🎙 Озвучка: {update['studio']}\n\n"
-                                    f"🔗 <a href='{update['link']}'>Смотреть</a>"
-                                ),
-                                parse_mode="HTML"
-                            )
-                            logger.info(f"Notification sent to {sub.user_id} for {update['title']}")
+                        # Числовое сравнение серий
+                        old_ep_num = extract_episode_number(sub.last_episode)
+                        new_ep_num = extract_episode_number(update['episode'])
 
-                            # Обновляем запись в БД
-                            await db.update_sub_last_episode(sub.id, update['episode'])
+                        if new_ep_num > old_ep_num:
+                            total_str = sub.total_episodes if sub.total_episodes else "?"
 
-                        except Exception as e:
-                            logger.error(f"Failed to send message to {sub.user_id}: {e}")
+                            try:
+                                await bot.send_message(
+                                    chat_id=sub.user_id,
+                                    text=(
+                                        f"🔥 <b>Новая серия!</b>\n\n"
+                                        f"📺 <b>{update['title']}</b>\n"
+                                        f"🎬 Серия: {new_ep_num} из {total_str}\n"
+                                        f"🎙 Озвучка: {update['studio']}\n\n"
+                                        f"🔗 <a href='{update['link']}'>Смотреть</a>"
+                                    ),
+                                    parse_mode="HTML"
+                                )
+                                logger.info(f"Sent update to {sub.user_id}: {update['title']} ep {new_ep_num}")
+
+                                # Обновляем последнюю серию
+                                await db.update_sub_last_episode(sub.id, update['episode'])
+
+                                # Проверяем, не последняя ли это серия
+                                if sub.total_episodes and new_ep_num >= sub.total_episodes:
+                                    await bot.send_message(
+                                        sub.user_id,
+                                        f"🏁 Аниме <b>{update['title']}</b> ({user_vo}) завершено! Удаляю из подписок."
+                                    )
+                                    await db.delete_subscription(sub.id)
+                                    logger.info(f"Anime finished and removed: {sub.anime_title}")
+
+                            except Exception as e:
+                                logger.error(f"Failed to send to {sub.user_id}: {e}")
     except Exception as e:
-        antispam.failed_requests += 1
-        logger.error(f"Checker error: {e}")
-        if not antispam.is_notified():
+        antispam_updates.failed_requests += 1
+        logger.error(f"Checker updates error: {e}")
+        if not antispam_updates.is_notified():
             await notify_admins(
                 bot,
-                f"Failed requests: {antispam.failed_requests}\nОшибка в модуле проверки обновлений (Checker):\n<code>{str(e)}</code>",
+                f"Failed requests: {antispam_updates.failed_requests}\nОшибка в Checker Updates:\n<code>{str(e)}</code>",
                 level="ERROR"
             )
-            antispam.set_notify_timestamp()
+            antispam_updates.set_notify_timestamp()
+
+
+async def check_missing_episodes_info(bot: Bot):
+    """
+    Фоновая задача: раз в день проверяет аниме, у которых total_episodes is NULL
+    """
+    try:
+        logger.info("Starting missing episodes check...")
+        subscriptions = await db.get_all_subscriptions()
+
+        # Чтобы не парсить один URL 100 раз, используем множество уникальных ссылок
+        # Но нам нужны ID подписок для обновления.
+
+        # Сгруппируем подписки по URL
+        url_map = {}
+        for sub in subscriptions:
+            if sub.total_episodes is None:
+                if sub.anime_url not in url_map:
+                    url_map[sub.anime_url] = []
+                url_map[sub.anime_url].append(sub.id)
+
+        for url, sub_ids in url_map.items():
+            info = await parser.get_anime_info(url, bot)
+
+            if info and info['total_episodes']:
+                logger.info(f"Found total episodes for {url}: {info['total_episodes']}")
+                for sub_id in sub_ids:
+                    await db.update_total_episodes(sub_id, info['total_episodes'])
+    except Exception as e:
+        logger.error(f"Checker episodes info error: {e}")
+        await notify_admins(
+            bot,
+            f"Ошибка в Checker Episodes Info:\n<code>{str(e)}</code>",
+            level="ERROR"
+        )
