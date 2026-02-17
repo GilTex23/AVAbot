@@ -50,11 +50,13 @@ async def cb_admin_back(callback: types.CallbackQuery, state: FSMContext):
 @router.callback_query(F.data == "admin_close")
 async def cb_admin_close(callback: types.CallbackQuery):
     await callback.message.delete()
+    await callback.answer("❌ Админ-панель закрыта.")
 
 
 # --- СТАТИСТИКА ---
 @router.callback_query(F.data == "admin_stats")
 async def cb_stats(callback: types.CallbackQuery):
+    await callback.answer()
     stats = await db.get_bot_stats()
 
     top_text = "\n".join([f"• {t[0]}: {t[1]}" for t in stats['top_anime']])
@@ -72,6 +74,7 @@ async def cb_stats(callback: types.CallbackQuery):
 # --- СЕРВЕР ---
 @router.callback_query(F.data == "admin_server")
 async def cb_server(callback: types.CallbackQuery):
+    await callback.answer()
     cpu = psutil.cpu_percent(interval=None)
     ram = psutil.virtual_memory()
     disk = psutil.disk_usage('/')
@@ -116,6 +119,7 @@ async def cb_force_check(callback: types.CallbackQuery):
 # --- РАССЫЛКА (BROADCAST) ---
 @router.callback_query(F.data == "admin_broadcast")
 async def cb_broadcast_start(callback: types.CallbackQuery, state: FSMContext):
+    await callback.answer()
     await state.update_data(callb_msg_id=callback.message.message_id, callb_chat_id=callback.message.chat.id)
     await callback.message.edit_text(
         "📢 <b>Рассылка</b>\n\n"
@@ -160,6 +164,7 @@ async def cb_broadcast_send(callback: types.CallbackQuery, state: FSMContext):
     msg_id = data.get("msg_id")
     from_chat = data.get("from_chat")
 
+    await callback.answer("⏳ Рассылка началась...")
     await callback.message.edit_text("⏳ Рассылка началась...")
 
     users = await db.get_all_users_ids()
@@ -189,6 +194,7 @@ async def cb_broadcast_send(callback: types.CallbackQuery, state: FSMContext):
 # --- SQL QUERY ---
 @router.callback_query(F.data == "admin_sql")
 async def cb_sql_start(callback: types.CallbackQuery, state: FSMContext):
+    await callback.answer()
     await callback.message.edit_text(
         "🗄 <b>SQL Mode</b>\n\n"
         "Введите SQL запрос. \n"

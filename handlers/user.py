@@ -72,6 +72,7 @@ async def cmd_start(message: types.Message, state: FSMContext):
 
 @router.callback_query(F.data == "back_home")
 async def cb_back_home(callback: types.CallbackQuery, state: FSMContext):
+    await callback.answer()
     await state.clear()
     await callback.message.delete()
     await callback.message.answer("Главное меню:", reply_markup=inline.main_menu())
@@ -80,6 +81,7 @@ async def cb_back_home(callback: types.CallbackQuery, state: FSMContext):
 # --- ПОЛУЧЕНИЕ ОБНОВЛЕНИЙ (DEFAULT) ---
 @router.callback_query(F.data == "get_updates_default")
 async def cb_get_updates_default(callback: types.CallbackQuery, state: FSMContext):
+    await callback.answer()
     user = await db.get_user(callback.from_user.id)
     vo = user.favorite_voiceover if user and user.favorite_voiceover else "AniLiberty"
 
@@ -90,6 +92,7 @@ async def cb_get_updates_default(callback: types.CallbackQuery, state: FSMContex
 # --- ВЫБОР ДРУГОЙ ОЗВУЧКИ (БЕЗ СОХРАНЕНИЯ) ---
 @router.callback_query(F.data == "select_other_vo")
 async def cb_select_other_vo(callback: types.CallbackQuery):
+    await callback.answer()
     await callback.message.edit_text(
         "Выберите озвучку для просмотра списка (это не изменит настройки по умолчанию):",
         reply_markup=inline.voiceover_selection("", mode="view")
@@ -99,6 +102,7 @@ async def cb_select_other_vo(callback: types.CallbackQuery):
 # --- НАСТРОЙКИ (С СОХРАНЕНИЕМ) ---
 @router.callback_query(F.data == "settings")
 async def cb_settings(callback: types.CallbackQuery):
+    await callback.answer()
     user = await db.get_user(callback.from_user.id)
     vo = user.favorite_voiceover if user else "Не выбрано"
 
@@ -113,6 +117,7 @@ async def cb_settings(callback: types.CallbackQuery):
 # --- ОБРАБОТКА ВЫБОРА ОЗВУЧКИ (ОБЩАЯ) ---
 @router.callback_query(F.data.startswith("set_vo_"))
 async def cb_handle_vo_selection(callback: types.CallbackQuery, state: FSMContext):
+    await callback.answer()
     # data format: set_vo_{mode}_{vo}
     parts = callback.data.split("_")
     mode = parts[2]  # save или view
@@ -134,6 +139,7 @@ async def cb_handle_vo_selection(callback: types.CallbackQuery, state: FSMContex
 # --- ДОБАВЛЕНИЕ В ИЗБРАННОЕ ИЗ СПИСКА (FSM) ---
 @router.callback_query(F.data.startswith("add_from_list_"), StateFilter(UpdatesState.viewing_list))
 async def cb_add_from_list(callback: types.CallbackQuery, state: FSMContext):
+    await callback.answer()
     idx = int(callback.data.split("_")[-1])
     data = await state.get_data()
     updates = data.get("current_updates", [])
@@ -192,6 +198,7 @@ async def cb_add_from_list(callback: types.CallbackQuery, state: FSMContext):
 
 @router.callback_query(F.data == "refresh_updates", StateFilter(UpdatesState.viewing_list))
 async def cb_refresh(callback: types.CallbackQuery, state: FSMContext):
+    await callback.answer()
     data = await state.get_data()
     vo = data.get("current_vo", "AniLiberty")
     await callback.answer("Обновляю...")
@@ -202,6 +209,7 @@ async def cb_refresh(callback: types.CallbackQuery, state: FSMContext):
 # --- ПОИСК АНИМЕ (FSM) ---
 @router.callback_query(F.data == "search_anime")
 async def cb_search_start(callback: types.CallbackQuery, state: FSMContext):
+    await callback.answer()
     await callback.message.edit_text(
         "Введите название аниме для поиска:",
         reply_markup=inline.back_button()
@@ -236,6 +244,7 @@ async def process_search(message: types.Message, state: FSMContext):
 # --- ПОДПИСКА ---
 @router.callback_query(F.data.startswith("sub|"))
 async def cb_subscribe(callback: types.CallbackQuery, state: FSMContext):
+    await callback.answer()
     url = callback.data.split("sub|")[1]
     fsm_data = await state.get_data()
     search_res = fsm_data.get("search_res", {})
@@ -267,6 +276,7 @@ async def cb_subscribe(callback: types.CallbackQuery, state: FSMContext):
 
 @router.callback_query(F.data == "cancel_search")
 async def cb_cancel_search(callback: types.CallbackQuery, state: FSMContext):
+    await callback.answer()
     await state.clear()
     await cb_back_home(callback, state)
 
@@ -274,6 +284,7 @@ async def cb_cancel_search(callback: types.CallbackQuery, state: FSMContext):
 # --- МОИ ПОДПИСКИ ---
 @router.callback_query(F.data == "my_subs")
 async def cb_my_subs(callback: types.CallbackQuery):
+    await callback.answer()
     subs = await db.get_user_subscriptions(callback.from_user.id)
 
     if not subs:
