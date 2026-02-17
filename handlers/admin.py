@@ -132,10 +132,12 @@ async def msg_broadcast_content(message: types.Message, state: FSMContext):
     # Копируем сообщение, чтобы показать админу превью
     # Используем copy_to, чтобы сохранить форматирование и медиа
     await message.copy_to(chat_id=message.chat.id)
+    data = await state.get_data()
 
     await state.update_data(msg_id=message.message_id, from_chat=message.chat.id)
     await message.bot.edit_message_text("📢 <b>Рассылка</b>\n\n"
         "Следуйте инструкциям далее...",
+        message_id=data.get("callb_msg_id"),
         reply_markup=None,
         parse_mode="HTML"
     )
