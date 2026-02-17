@@ -43,16 +43,13 @@ def updates_list_actions(anime_list: list):
             callback_data=f"add_from_list_{index}"
         )
 
-    # Делаем сетку по 5 кнопок в ряд (или 8, если названия короткие, но 5 оптимально для мобилок)
     kb.adjust(5)
 
-    # Добавляем кнопки управления отдельным блоком, чтобы они были внизу во всю ширину
     control_kb = InlineKeyboardBuilder()
     control_kb.button(text="🔄 Обновить", callback_data="refresh_updates")
     control_kb.button(text="🔙 В меню", callback_data="back_home")
     control_kb.adjust(2)
 
-    # Прикрепляем кнопки управления к цифровой клавиатуре
     kb.attach(control_kb)
 
     return kb.as_markup()
@@ -68,12 +65,19 @@ def search_results(results: list):
     return kb.as_markup()
 
 
-def subs_list(subscriptions: list):
+def subs_list_actions(subscriptions: list):
+    """
+    Генерирует кнопки-цифры для удаления подписок: [1] [2] [3]
+    """
     kb = InlineKeyboardBuilder()
-    for sub in subscriptions:
-        vo_info = f" ({sub.voiceover})" if sub.voiceover else ""
-        kb.button(text=f"🗑 {sub.anime_title[:15]}{vo_info}", callback_data=f"unsub_{sub.id}")
-    kb.adjust(1)
+
+    for index, sub in enumerate(subscriptions):
+        kb.button(
+            text=str(index + 1),
+            callback_data=f"unsub_{sub.id}"
+        )
+
+    kb.adjust(5)
     kb.button(text="🔙 Назад", callback_data="back_home")
     return kb.as_markup()
 

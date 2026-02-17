@@ -137,25 +137,55 @@ async def cb_add_from_list(callback: types.CallbackQuery, state: FSMContext):
     data = await state.get_data()
     updates = data.get("current_updates", [])
 
-    anime = updates[idx]
-    vo_to_save = anime['studio']
-
     if not updates or idx >= len(updates):
-        await callback.answer("⚠️ Данные устарели. Обновите список.", show_alert=True)
+        await callback.answer("⚠️ Ошибка данных", show_alert=True)
         return
 
+    anime = updates[idx]
+
+    # 1. Парсим страницу аниме перед добавлением!
+    await callback.answer("🔍 Проверяю статус аниме...")
+
+    info = await parser.get_anime_info(anime['link'])
+
+    if not info:
+        await callback.message.answer("⚠️ Не удалось получить информацию об аниме. Попробуйте позже.")
+        return
+
+    # 2. Проверка ограничений
+    # Если статус "Вышел" (завершен)
+    if info.get('status') and "Вышел" in info['status']:
+        await callback.message.answer(f"⛔️ Нельзя добавить <b>{anime['title']}</b>.\nПричина: Аниме уже завершено.",
+                                      parse_mode="HTML")
+        return
+
+    # Если тип "Фильм" (обычно одна серия, обновлений не будет)
+    if info.get('type') and "Фильм" in info['type']:
+        await callback.message.answer(
+            f"⛔️ Нельзя добавить <b>{anime['title']}</b>.\nПричина: Это фильм.",
+            parse_mode="HTML")
+        return
+
+    # 3. Добавляем в БД
     success = await db.add_subscription(
         tg_id=callback.from_user.id,
         title=anime['title'],
         url=anime['link'],
         last_ep=anime['episode'],
-        voiceover=vo_to_save
+        voiceover=anime['studio'],
+        total_eps=info['total_episodes']  # Сохраняем всего серий
     )
 
     if success:
-        await callback.answer(f"✅ Добавлено: {anime['title']} ({vo_to_save})", show_alert=False)
+        total_str = info['total_episodes'] if info['total_episodes'] else "?"
+        await callback.message.answer(
+            f"✅ <b>{anime['title']}</b> добавлен!\n"
+            f"Озвучка: {anime['studio']}\n"
+            f"Прогресс: {anime['episode']} / {total_str}",
+            parse_mode="HTML"
+        )
     else:
-        await callback.answer("⚠️ Вы уже подписаны на это аниме с этой озвучкой", show_alert=True)
+        await callback.message.answer("⚠️ Вы уже подписаны на это аниме с этой озвучкой.")
 
 
 @router.callback_query(F.data == "refresh_updates", StateFilter(UpdatesState.viewing_list))
@@ -246,14 +276,27 @@ async def cb_my_subs(callback: types.CallbackQuery):
 
     if not subs:
         await callback.message.edit_text(
-            "У вас пока нет подписок. Нажмите 'Поиск аниме' чтобы добавить.",
+            "У вас пока нет подписок.",
             reply_markup=inline.back_button()
         )
         return
 
+    # Формируем нумерованный список
+    text_lines = ["📋 <b>Ваши подписки:</b>\n"]
+    for i, sub in enumerate(subs):
+        total_str = sub.total_episodes if sub.total_episodes else "?"
+        last_ep_num = sub.last_episode.replace("Серия", "").strip()
+
+        text_lines.append(
+            f"<b>{i + 1}.</b> {sub.anime_title} <i>({sub.voiceover})</i> [{last_ep_num} / {total_str}]"
+        )
+
+    text_lines.append("\n<i>Нажмите на номер внизу, чтобы удалить подписку.</i>")
+
     await callback.message.edit_text(
-        "📋 Ваши подписки (нажмите, чтобы удалить):",
-        reply_markup=inline.subs_list(subs)
+        "\n".join(text_lines),
+        reply_markup=inline.subs_list_actions(subs),
+        parse_mode="HTML"
     )
 
 
@@ -262,4 +305,6 @@ async def cb_unsubscribe(callback: types.CallbackQuery):
     sub_id = int(callback.data.split("unsub_")[1])
     await db.delete_subscription(sub_id)
     await callback.answer("🗑 Подписка удалена")
+
+    # Обновляем список
     await cb_my_subs(callback)
