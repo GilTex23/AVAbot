@@ -18,7 +18,7 @@ async def show_updates_for_vo(message: types.Message, state: FSMContext, vo: str
     """Парсит, формирует текст и кнопки для добавления"""
     msg = await message.answer(f"⏳ Загружаю обновления ({vo})...")
 
-    updates = await parser.get_filtered(vo)
+    updates = await parser.get_filtered(vo, message.bot)
 
     if not updates:
         await msg.edit_text(
@@ -182,7 +182,7 @@ async def process_search(message: types.Message, state: FSMContext):
     query = message.text
     msg = await message.answer("🔎 Ищу...")
 
-    results = await parser.search_anime(query)
+    results = await parser.search_anime(query, message.bot)
 
     if not results:
         await msg.edit_text(

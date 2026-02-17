@@ -129,12 +129,12 @@ async def get_html(url: str, session: aiohttp.ClientSession = None, bot: Bot=Non
                 await session.close()
 
 
-async def get_updates():
+async def get_updates(bot: Bot):
     """
     Парсит главную страницу и возвращает список свежих серий.
     """
     async with aiohttp.ClientSession() as session:
-        html_text = await get_html(URL_MAIN, session)
+        html_text = await get_html(URL_MAIN, session, bot)
         if not html_text:
             return []
 
@@ -185,11 +185,11 @@ async def get_updates():
         return fresh_updates
 
 
-async def get_filtered(vo: str):
+async def get_filtered(vo: str, bot: Bot):
     """
     Возвращает СПИСОК аниме (list of dict), отфильтрованный по озвучке.
     """
-    updates = await get_updates()
+    updates = await get_updates(bot)
 
     filtered_anime = []
     for anime in updates:
@@ -203,7 +203,7 @@ async def get_filtered(vo: str):
     return filtered_anime
 
 
-async def search_anime(query: str):
+async def search_anime(query: str, bot: Bot):
     """Поиск аниме (для функционала подписки)"""
     encoded_query = urllib.parse.quote(query)
     url = f"{URL_SEARCH}{encoded_query}"

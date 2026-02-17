@@ -15,7 +15,7 @@ async def check_updates(bot: Bot):
         logger.debug("Starting anime check cycle...")
 
         # 1. Получаем свежие данные с сайта
-        updates = await get_updates()
+        updates = await get_updates(bot)
         if not updates:
             logger.warning("Updates wasn't handled")
             return
