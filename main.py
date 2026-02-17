@@ -51,7 +51,7 @@ async def lifespan(app: FastAPI):
 
     # --- SHUTDOWN ---
     logger.info("––– Shutting down... –––")
-    await notify_admins(bot, "Бот останавливается (Shutdown signal)\nServer timestamp: {datetime.now().replace(microsecond=0)}", level="WARNING")
+    await notify_admins(bot, f"Бот останавливается (Shutdown signal)\nServer timestamp: {datetime.now().replace(microsecond=0)}", level="WARNING")
     await bot.session.close()
     scheduler.shutdown()
 
