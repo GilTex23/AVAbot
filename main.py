@@ -3,6 +3,7 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI, Request
 from aiogram import types
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
+from datetime import datetime
 
 import config
 from loader import bot, dp
@@ -44,13 +45,13 @@ async def lifespan(app: FastAPI):
     scheduler.add_job(check_updates, "interval", minutes=15, args=[bot])
     scheduler.start()
 
-    await notify_admins(bot, "Бот успешно запущен и готов к работе!", level="INFO")
+    await notify_admins(bot, f"Бот успешно запущен и готов к работе!\nServer timestamp: {datetime.now().replace(microsecond=0)}", level="INFO")
 
     yield
 
     # --- SHUTDOWN ---
     logger.info("––– Shutting down... –––")
-    await notify_admins(bot, "Бот останавливается (Shutdown signal)", level="WARNING")
+    await notify_admins(bot, "Бот останавливается (Shutdown signal)\nServer timestamp: {datetime.now().replace(microsecond=0)}", level="WARNING")
     await bot.session.close()
     scheduler.shutdown()
 
