@@ -1,7 +1,8 @@
 from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
-from sqlalchemy import select, update, delete, and_
+from sqlalchemy import select, update, delete, and_, func, text
 from sqlalchemy.orm import joinedload
 from database.models import Base, User, Subscription
+import datetime
 import config
 
 engine = create_async_engine(config.DATABASE_URL, echo=False)
@@ -113,3 +114,55 @@ async def update_sub_last_episode(sub_id: int, episode: str):
             .values(last_episode=episode)
         )
         await session.commit()
+
+
+# --- ADMIN FUNCTIONS ---
+async def get_bot_stats():
+    """Собирает статистику по пользователям и подпискам"""
+    async with async_session() as session:
+        users_count = await session.scalar(select(func.count(User.id)))
+
+        subs_count = await session.scalar(select(func.count(Subscription.id)))
+
+        day_ago = datetime.datetime.utcnow() - datetime.timedelta(days=1)
+        new_users = await session.scalar(select(func.count(User.id)).where(User.registered_at >= day_ago))
+
+        # Топ-3 популярных аниме
+        # (Сложный запрос, группировка по названию)
+        top_anime = await session.execute(
+            select(Subscription.anime_title, func.count(Subscription.user_id).label('count'))
+            .group_by(Subscription.anime_title)
+            .order_by(text('count DESC'))
+            .limit(3)
+        )
+
+        return {
+            "users": users_count,
+            "subs": subs_count,
+            "new_users": new_users,
+            "top_anime": top_anime.all()
+        }
+
+
+async def get_all_users_ids():
+    """Возвращает ID всех пользователей для рассылки"""
+    async with async_session() as session:
+        result = await session.execute(select(User.id))
+        return result.scalars().all()
+
+
+async def execute_raw_sql(sql_query: str):
+    """Выполнение произвольного SQL (ОПАСНО, только для админа)"""
+    async with async_session() as session:
+        try:
+            # Если это SELECT, возвращаем данные
+            if sql_query.strip().upper().startswith("SELECT"):
+                result = await session.execute(text(sql_query))
+                return result.fetchall()
+            else:
+                # Если INSERT/UPDATE/DELETE/DROP
+                await session.execute(text(sql_query))
+                await session.commit()
+                return "Запрос выполнен успешно (изменения сохранены)."
+        except Exception as e:
+            return f"Ошибка SQL: {e}"
