@@ -1,5 +1,6 @@
 from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 from sqlalchemy import select, update, delete, and_
+from sqlalchemy.orm import joinedload
 from database.models import Base, User, Subscription
 import config
 
@@ -74,9 +75,12 @@ async def add_subscription(tg_id: int, title: str, url: str, last_ep: str, voice
 
 
 async def get_all_subscriptions():
+    """Получить все подписки для чекера (с ЖАДНОЙ подгрузкой User)"""
     async with async_session() as session:
-        result = await session.execute(select(Subscription).join(User))
-        return result.scalars().all()
+        query = select(Subscription).options(joinedload(Subscription.user))
+        result = await session.execute(query)
+        # .unique() часто нужен при joinedload, чтобы убрать дубликаты в ORM
+        return result.scalars().unique().all()
 
 
 async def get_user_subscriptions(tg_id: int):
