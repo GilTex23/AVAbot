@@ -4,11 +4,11 @@ from aiogram.utils.keyboard import InlineKeyboardBuilder
 
 def main_menu():
     kb = InlineKeyboardBuilder()
-    kb.button(text="🔥 Свежие серии\nЛюбимая озвучка", callback_data="get_updates_default")
+    kb.button(text="🔥 Свежие серии (Любимая)", callback_data="get_updates_default")
     kb.button(text="🎙 Другая озвучка", callback_data="select_other_vo")
     kb.button(text="🔍 Поиск аниме", callback_data="search_anime")
     kb.button(text="📋 Мои подписки", callback_data="my_subs")
-    kb.button(text="⚙️ Настройки озвучки", callback_data="settings")
+    kb.button(text="⚙️ Настройки любимой", callback_data="settings")
     kb.adjust(1)
     return kb.as_markup()
 
