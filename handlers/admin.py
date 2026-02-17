@@ -135,13 +135,17 @@ async def msg_broadcast_content(message: types.Message, state: FSMContext):
     data = await state.get_data()
 
     await state.update_data(msg_id=message.message_id, from_chat=message.chat.id)
-    await message.bot.edit_message_text("📢 <b>Рассылка</b>\n\n"
-        "Следуйте инструкциям далее...",
-        chat_id=data.get("callb_chat_id"),
-        message_id=data.get("callb_msg_id"),
-        reply_markup=None,
-        parse_mode="HTML"
-    )
+
+    try:
+        await message.bot.edit_message_text("📢 <b>Рассылка</b>\n\n"
+            "Следуйте инструкциям далее...",
+            chat_id=data.get("callb_chat_id"),
+            message_id=data.get("callb_msg_id"),
+            reply_markup=None,
+            parse_mode="HTML"
+        )
+    except Exception as e:
+        logger.warning("Error edit message: State may be empty.")
 
     await message.answer(
         "👆 Вот так будет выглядеть сообщение.\nПодтверждаете рассылку?",
