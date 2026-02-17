@@ -43,7 +43,7 @@ async def lifespan(app: FastAPI):
     logger.info("Webhook ready")
 
     scheduler.add_job(check_updates, "interval", minutes=15, args=[bot], id="updates_checker", replace_existing=True)
-    scheduler.add_job(check_missing_episodes_info, "cron", hour=21, minute=0)
+    scheduler.add_job(check_missing_episodes_info, "cron", hour=21, minute=0, args=[bot])
     scheduler.start()
 
     await notify_admins(bot, f"Бот успешно запущен и готов к работе!", level="INFO")
