@@ -46,11 +46,8 @@ async def get_user_voiceover(tg_id: int):
 
 
 # --- SUBSCRIPTIONS ---
-async def add_subscription(tg_id: int, title: str, url: str, last_ep: str, voiceover: str):
-    """Добавляет подписку с конкретной озвучкой"""
+async def add_subscription(tg_id: int, title: str, url: str, last_ep: str, voiceover: str, total_eps: int = None):
     async with async_session() as session:
-        # Проверяем уникальность по URL И ОЗВУЧКЕ
-        # Человек может подписаться на одно аниме дважды с разной озвучкой
         existing = await session.scalar(
             select(Subscription).where(
                 and_(
@@ -68,10 +65,21 @@ async def add_subscription(tg_id: int, title: str, url: str, last_ep: str, voice
             anime_title=title,
             anime_url=url,
             last_episode=last_ep,
-            voiceover=voiceover
+            voiceover=voiceover,
+            total_episodes=total_eps
         ))
         await session.commit()
         return True
+
+async def update_total_episodes(sub_id: int, total_eps: int):
+    """Обновляет общее количество серий у подписки"""
+    async with async_session() as session:
+        await session.execute(
+            update(Subscription)
+            .where(Subscription.id == sub_id)
+            .values(total_episodes=total_eps)
+        )
+        await session.commit()
 
 
 async def get_all_subscriptions():
