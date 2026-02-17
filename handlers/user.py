@@ -32,7 +32,7 @@ async def show_updates_for_vo(message: types.Message, state: FSMContext, vo: str
     text_lines = [f"🔥 <b>Свежие серии ({vo}):</b>\n"]
     for i, anime in enumerate(updates):
         text_lines.append(
-            f"<b>{i + 1}.</b> <a href='{anime['link']}'>{anime['title']}</a> — {anime['episode']} <i>({anime['studio']})</i>"
+            f"<b>{i + 1}.</b> <a href='{anime['link']}'>{anime['title']}</a>\n{anime['episode']} <i>({anime['studio']})</i>"
         )
 
     text_lines.append("\n<i>Нажми на номер ниже, чтобы добавить аниме в любимые.</i>")
@@ -145,23 +145,24 @@ async def cb_add_from_list(callback: types.CallbackQuery, state: FSMContext):
 
     # 1. Парсим страницу аниме перед добавлением!
     await callback.answer("🔍 Проверяю статус аниме...")
+    msg = await callback.message.answer("🔍 Проверяю статус аниме...")
 
     info = await parser.get_anime_info(anime['link'], callback.bot)
 
     if not info:
-        await callback.message.answer("⚠️ Не удалось получить информацию об аниме. Попробуйте позже.")
+        await msg.edit_text("⚠️ Не удалось получить информацию об аниме. Попробуйте позже.")
         return
 
     # 2. Проверка ограничений
     # Если статус "Вышел" (завершен)
     if info.get('status') and "Вышел" in info['status']:
-        await callback.message.answer(f"⛔️ Нельзя добавить <b>{anime['title']}</b>.\nПричина: Аниме уже завершено.",
+        await msg.edit_text(f"⛔️ Нельзя добавить <b>{anime['title']}</b>.\nПричина: Аниме уже завершено.",
                                       parse_mode="HTML")
         return
 
     # Если тип "Фильм" (обычно одна серия, обновлений не будет)
     if info.get('type') and "Фильм" in info['type']:
-        await callback.message.answer(
+        await msg.edit_text(
             f"⛔️ Нельзя добавить <b>{anime['title']}</b>.\nПричина: Это фильм.",
             parse_mode="HTML")
         return
@@ -178,14 +179,14 @@ async def cb_add_from_list(callback: types.CallbackQuery, state: FSMContext):
 
     if success:
         total_str = info['total_episodes'] if info['total_episodes'] else "?"
-        await callback.message.answer(
-            f"✅ <b>{anime['title']}</b> добавлен!\n"
+        await msg.edit_text(
+            f"✅ Аниме <b>{anime['title']}</b> добавлено в список ваших подписок!\n"
             f"Озвучка: {anime['studio']}\n"
             f"Прогресс: {anime['episode']} / {total_str}",
             parse_mode="HTML"
         )
     else:
-        await callback.message.answer("⚠️ Вы уже подписаны на это аниме с этой озвучкой.")
+        await msg.edit_text("⚠️ Вы уже подписаны на это аниме с этой озвучкой.")
 
 
 @router.callback_query(F.data == "refresh_updates", StateFilter(UpdatesState.viewing_list))
