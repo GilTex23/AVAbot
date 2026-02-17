@@ -185,6 +185,57 @@ async def get_updates(bot: Bot):
         return fresh_updates
 
 
+async def get_anime_info(url: str, bot: Bot):
+    """
+    Парсит страницу аниме и возвращает:
+    {
+        'status': str (Онгоинг/Вышел/Анонс),
+        'type': str (Сериал/Фильм/...),
+        'total_episodes': int or None (если '?')
+    }
+    """
+    async with aiohttp.ClientSession() as session:
+        html_text = await get_html(url, session, bot)
+
+    if not html_text:
+        return None
+
+    soup = bs(html_text, 'html.parser')
+    info = {}
+
+    try:
+        def get_value(label_text):
+            label_div = soup.find('div', string=lambda t: t and label_text in t, class_='text-body-tertiary')
+            if label_div:
+                value_div = label_div.find_next_sibling('div')
+                if value_div:
+                    return value_div.get_text(strip=True)
+            return None
+
+        # 1. Тип
+        info['type'] = get_value("Тип")
+
+        # 2. Статус
+        info['status'] = get_value("Статус")
+
+        # 3. Эпизоды (формат "6 / 13" или "6 / ?").
+        episodes_str = get_value("Эпизоды")
+        info['total_episodes'] = None
+
+        if episodes_str:
+            parts = episodes_str.split('/')
+            if len(parts) == 2:
+                total_str = parts[1].strip()
+                if total_str.isdigit():
+                    info['total_episodes'] = int(total_str)
+
+        return info
+
+    except Exception as e:
+        logger.error(f"Error parsing anime info {url}: {e}")
+        return None
+
+
 async def get_filtered(vo: str, bot: Bot):
     """
     Возвращает СПИСОК аниме (list of dict), отфильтрованный по озвучке.
