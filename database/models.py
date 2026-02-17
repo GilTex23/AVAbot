@@ -27,6 +27,9 @@ class Subscription(Base):
     anime_url = Column(String, nullable=False)
     anime_title = Column(String, nullable=False)
     voiceover = Column(String, nullable=False, default="Unknown")
+
+    total_episodes = Column(Integer, nullable=True)
+
     last_episode = Column(String, nullable=True)
 
     user = relationship("User", back_populates="subscriptions")
