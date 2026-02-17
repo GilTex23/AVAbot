@@ -290,7 +290,7 @@ async def cb_my_subs(callback: types.CallbackQuery):
         last_ep_num = sub.last_episode.replace("Серия", "").strip()
 
         text_lines.append(
-            f"<b>{i + 1}.</b> {sub.anime_title} <i>({sub.voiceover})</i> [{last_ep_num} / {total_str}]"
+            f"<b>{i + 1}.</b> <a href='{sub.anime_url}'>{sub.anime_title}</a> <i>({sub.voiceover})</i> [{last_ep_num} / {total_str}]"
         )
 
     text_lines.append("\n<i>Нажмите на номер внизу, чтобы удалить подписку.</i>")
