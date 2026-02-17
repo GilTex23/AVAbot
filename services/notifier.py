@@ -1,5 +1,6 @@
 import logging
 from aiogram import Bot
+from datetime import datetime
 import config
 
 logger = logging.getLogger(__name__)
@@ -25,8 +26,10 @@ async def notify_admins(bot: Bot, message: str, level: str = "INFO"):
 
     full_text = f"{header}\n\n{message}"
 
-    if len(full_text) > 4000:
-        full_text = full_text[:4000] + "... (сообщение обрезано)"
+    if len(full_text) > 3900:
+        full_text = full_text[:3900] + "... (сообщение обрезано)"
+
+    full_text += f"\n\n<b>Server timestamp:</b> <u>{datetime.now().replace(microsecond=0)}</u>"
 
     for admin_id in config.ADMIN_IDS:
         try:
