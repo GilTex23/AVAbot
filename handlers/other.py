@@ -1,5 +1,6 @@
 from aiogram import Router
 from aiogram.types import ErrorEvent
+from aiogram.exceptions import TelegramBadRequest
 from services.notifier import notify_admins
 import logging
 import traceback
@@ -14,8 +15,19 @@ async def global_error_handler(event: ErrorEvent, bot):
     Ловит все необработанные ошибки в боте
     """
     exception = event.exception
-    tb = traceback.format_exc()
 
+    # --- ФИЛЬТР ОШИБОК ---
+    if isinstance(exception, TelegramBadRequest):
+        if "message is not modified" in str(exception):
+            logger.info("Skipped 'Message is not modified' error")
+            return
+
+    if isinstance(exception, TelegramBadRequest):
+        if "bot was blocked by the user" in str(exception):
+            return
+
+    # --- ЛОГИКА ДЛЯ ОСТАЛЬНЫХ ОШИБОК ---
+    tb = traceback.format_exc()
     logger.error(f"Global error: {exception}")
 
     error_message = (
