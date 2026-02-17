@@ -116,6 +116,7 @@ async def cb_force_check(callback: types.CallbackQuery):
 # --- РАССЫЛКА (BROADCAST) ---
 @router.callback_query(F.data == "admin_broadcast")
 async def cb_broadcast_start(callback: types.CallbackQuery, state: FSMContext):
+    await state.update_data(callb_msg_id=callback.message.message_id)
     await callback.message.edit_text(
         "📢 <b>Рассылка</b>\n\n"
         "Отправьте сообщение (текст, фото, видео), которое вы хотите разослать всем пользователям.\n"
@@ -133,6 +134,11 @@ async def msg_broadcast_content(message: types.Message, state: FSMContext):
     await message.copy_to(chat_id=message.chat.id)
 
     await state.update_data(msg_id=message.message_id, from_chat=message.chat.id)
+    await message.bot.edit_message_text("📢 <b>Рассылка</b>\n\n"
+        "Следуйте инструкциям далее...",
+        reply_markup=None,
+        parse_mode="HTML"
+    )
 
     await message.answer(
         "👆 Вот так будет выглядеть сообщение.\nПодтверждаете рассылку?",
@@ -167,7 +173,7 @@ async def cb_broadcast_send(callback: types.CallbackQuery, state: FSMContext):
     await callback.message.answer(
         f"✅ Рассылка завершена!\n"
         f"📨 Отправлено: {count}\n"
-        f"🚫 Недоставлено (блок): {blocked}",
+        f"🚫 Не доставлено (блок): {blocked}",
         reply_markup=admin_kb.back_to_admin()
     )
     await state.clear()
