@@ -84,7 +84,7 @@ async def cb_get_updates_default(callback: types.CallbackQuery, state: FSMContex
     user = await db.get_user(callback.from_user.id)
     vo = user.favorite_voiceover if user and user.favorite_voiceover else "AniLiberty"
 
-    await callback.answer(f"⏳ Загружаю обновления ({vo})...", cache_time=30)
+    await callback.answer(f"⏳ Загружаю обновления ({vo})...", cache_time=60)
     await callback.message.delete()
     await show_updates_for_vo(callback.message, state, vo)
 
@@ -151,7 +151,7 @@ async def cb_add_from_list(callback: types.CallbackQuery, state: FSMContext):
     anime = updates[idx]
 
     # 1. Парсим страницу аниме перед добавлением!
-    await callback.answer("🔍 Проверяю статус аниме...", cache_time=30)
+    await callback.answer("🔍 Проверяю статус аниме...", cache_time=60)
     msg = await callback.message.answer("🔍 Проверяю статус аниме...")
 
     info = await parser.get_anime_info(anime['link'], callback.bot)
