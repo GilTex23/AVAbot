@@ -151,7 +151,7 @@ async def cb_add_from_list(callback: types.CallbackQuery, state: FSMContext):
     anime = updates[idx]
 
     # 1. Парсим страницу аниме перед добавлением!
-    await callback.answer("🔍 Проверяю статус аниме...")
+    await callback.answer("🔍 Проверяю статус аниме...", cache_time=5)
     msg = await callback.message.answer("🔍 Проверяю статус аниме...")
 
     info = await parser.get_anime_info(anime['link'], callback.bot)
