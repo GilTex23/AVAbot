@@ -8,6 +8,7 @@ from datetime import datetime
 import config
 from loader import bot, dp
 from handlers import user, admin, other
+from middlewares.callback import CallbackAnswerMiddleware
 from services.logger import setup_logger
 from services.checker import check_updates, check_missing_episodes_info
 from services.notifier import notify_admins
@@ -24,6 +25,10 @@ async def lifespan(app: FastAPI):
     logger.info("––– Starting up... –––")
 
     await init_db()
+    logger.info("Database initialize successfully")
+
+    dp.callback_query.middleware(CallbackAnswerMiddleware())
+    logger.info("Callback query middleware installed successfully")
 
     dp.include_router(admin.router)
     logger.info("Admin router included successfully")
