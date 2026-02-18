@@ -23,7 +23,7 @@ async def render_main_menu(message: types.Message, user_id: int, is_edit: bool =
     is_edit=False -> отправляем новое (для команды /start)
     """
     # Текст меню
-    text = "👋 <b>Главное меню:</b>\nВыберите действие ниже."
+    text = "👋 <b>Главное меню:</b>"
     kb = inline.main_menu()
 
     if is_edit:
@@ -57,9 +57,13 @@ async def show_updates_for_vo(message: types.Message, state: FSMContext, vo: str
 
     text_lines = [f"🔥 <b>Свежие серии ({vo}):</b>\n"]
     for i, anime in enumerate(updates):
+        # text_lines.append(
+        #     f"<b>{i + 1}.</b> <a href='{anime['link']}'>{anime['title']}</a>\n"
+        #     f"🎬 <b>{anime['episode']}</b> <i>({anime['studio']})</i>"
+        # )
         text_lines.append(
             f"<b>{i + 1}.</b> <a href='{anime['link']}'>{anime['title']}</a>\n"
-            f"🎬 <b>{anime['episode']}</b> <i>({anime['studio']})</i>"
+            f"   └ <b><i>{anime['episode']}</i></b> • <i>{anime['studio']}</i>"
         )
 
     text_lines.append("\n<i>Нажми на кнопку с номером, чтобы добавить аниме в любимые.</i>")
@@ -118,8 +122,7 @@ async def cb_get_updates_default(callback: types.CallbackQuery, state: FSMContex
 async def cb_select_other_vo(callback: types.CallbackQuery):
     await callback.answer("🎙 Выбор режима просмотра")
     await callback.message.edit_text(
-        "👁 <b>Режим просмотра</b>\n"
-        "Выберите озвучку, чтобы посмотреть список серий (настройки по умолчанию <b>не изменятся</b>):",
+        "Выберите озвучку для просмотра списка <i>(это не изменит настройки по умолчанию)</i>:",
         reply_markup=inline.voiceover_selection("", mode="view"),
         parse_mode="HTML"
     )
