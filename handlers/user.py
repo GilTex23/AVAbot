@@ -154,7 +154,7 @@ async def cb_handle_vo_selection(callback: types.CallbackQuery, state: FSMContex
     if mode == "save":
         await db.update_user_voiceover(callback.from_user.id, vo)
         await callback.answer(f"✅ Сохранено: {vo}", show_alert=False)
-        await render_main_menu(callback.message, callback.from_user.id, is_edit=True)
+        await callback.message.edit_reply_markup(reply_markup=inline.voiceover_selection(vo, mode="save"))
 
     elif mode == "view":
         await callback.answer(f"👁 Загружаю: {vo}")
@@ -225,7 +225,8 @@ async def cb_add_from_list(callback: types.CallbackQuery, state: FSMContext):
             parse_mode="HTML"
         )
     else:
-        await msg.edit_text(f"⚠️ Вы уже подписаны на аниме <b>{anime['title']}</b> с озвучкой \"{anime['studio']}\".")
+        await msg.edit_text(f"⚠️ Вы уже подписаны на аниме <b>{anime['title']}</b> с озвучкой \"{anime['studio']}\".",
+                            parse_mode="HTML")
         await callback.answer(f"⚠️ {anime['title']} уже в ваших подписках!", cache_time=10)
 
 
