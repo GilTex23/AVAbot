@@ -50,7 +50,7 @@ async def show_updates_for_vo(message: types.Message, state: FSMContext, vo: str
     if not updates:
         await message.edit_text(
             f"😔 Свежих серий с озвучкой <b>{vo}</b> не найдено.",
-            reply_markup=inline.back_button(),
+            reply_markup=inline.updates_list_actions(list()),
             parse_mode="HTML"
         )
         return
