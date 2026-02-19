@@ -426,7 +426,7 @@ async def cb_my_subs(callback: types.CallbackQuery):
     if not subs:
         await callback.message.edit_text(
             "📭 <b>У вас пока нет подписок.</b>\n"
-            "Добавьте аниме через поиск или список свежих серий.",
+            "Добавьте аниме через расписание или список свежих серий.",
             reply_markup=inline.back_button(),
             parse_mode="HTML"
         )
