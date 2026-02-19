@@ -112,7 +112,6 @@ async def get_html(url: str, session: aiohttp.ClientSession = None, bot: Bot=Non
                         logger.error(f"Response text: {error_text[:900]}")
                     except Exception as e:
                         logger.error(f"Failed to get error text: {e}")
-
                 return None
 
         except asyncio.TimeoutError:
