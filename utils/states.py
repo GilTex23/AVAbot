@@ -1,10 +1,11 @@
 from aiogram.fsm.state import StatesGroup, State
 
-class SearchState(StatesGroup):
-    waiting_for_title = State()
-
 class UpdatesState(StatesGroup):
     viewing_list = State()
+
+class ScheduleState(StatesGroup):
+    viewing_schedule = State()
+    selecting_voiceover = State()
 
 class AdminState(StatesGroup):
     waiting_for_broadcast_content = State()
