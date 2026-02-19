@@ -177,10 +177,6 @@ async def cb_get_logs(callback: types.CallbackQuery, state: FSMContext):
     # Ищем файлы
     content = ""
     for date_str in target_dates:
-        # Если дата = сегодня, читаем основной файл (bot.log), НО
-        # TimedRotatingFileHandler пишет в основной файл только сегодняшние логи.
-        # Вчерашние он переименовывает в bot.log.YYYY-MM-DD.
-
         file_path = ""
         if date_str == today_str:
             file_path = os.path.join(log_dir, base_filename)
@@ -269,8 +265,6 @@ async def cb_broadcast_start(callback: types.CallbackQuery, state: FSMContext):
 
 @router.message(StateFilter(AdminState.waiting_for_broadcast_content))
 async def msg_broadcast_content(message: types.Message, state: FSMContext):
-    # Копируем сообщение, чтобы показать админу превью
-    # Используем copy_to, чтобы сохранить форматирование и медиа
     await message.copy_to(chat_id=message.chat.id)
     data = await state.get_data()
 
