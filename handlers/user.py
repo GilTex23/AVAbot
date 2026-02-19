@@ -48,9 +48,11 @@ async def show_updates_for_vo(message: types.Message, state: FSMContext, vo: str
     updates = await parser.get_filtered(vo, message.bot)
 
     if not updates:
+        await state.update_data(current_updates=updates, current_vo=vo)
+        await state.set_state(UpdatesState.viewing_list)
         await message.edit_text(
             f"😔 Свежих серий с озвучкой <b>{vo}</b> не найдено.",
-            reply_markup=inline.updates_list_actions(list()),
+            reply_markup=inline.updates_list_actions(updates),
             parse_mode="HTML"
         )
         return
