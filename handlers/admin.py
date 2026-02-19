@@ -1,6 +1,10 @@
 import os
 import psutil
 import logging
+import glob
+import zipfile
+from io import BytesIO
+from datetime import datetime, timedelta
 from aiogram import Router, F, types
 from aiogram.filters import Command, StateFilter, Filter
 from aiogram.fsm.context import FSMContext
@@ -88,19 +92,151 @@ async def cb_server(callback: types.CallbackQuery):
     await callback.message.edit_text(text, reply_markup=admin_kb.back_to_admin(), parse_mode="HTML")
 
 
-# --- ЛОГИ ---
+# --- ЛОГИ: ГЛАВНОЕ МЕНЮ ---
 @router.callback_query(F.data == "admin_logs")
-async def cb_logs(callback: types.CallbackQuery):
-    await callback.answer("Отправляю логи...")
-    try:
-        log_file = FSInputFile("logs/bot.log")
-        await callback.message.answer_document(log_file, caption="📄 Bot Logs")
+async def cb_logs_menu(callback: types.CallbackQuery):
+    await callback.message.edit_text(
+        "🪵 <b>Управление логами</b>\nВыберите тип логов:",
+        reply_markup=admin_kb.admin_logs_menu(),
+        parse_mode="HTML"
+    )
 
-        if os.path.exists("logs/errors.log"):
-            err_file = FSInputFile("logs/errors.log")
-            await callback.message.answer_document(err_file, caption="❌ Error Logs")
-    except Exception as e:
-        await callback.message.answer(f"Ошибка при чтении логов: {e}")
+
+# --- ЛОГИ: ВЫБОР ПЕРИОДА ---
+@router.callback_query(F.data.startswith("logs_type_"))
+async def cb_logs_period(callback: types.CallbackQuery):
+    log_type = callback.data.split("_")[-1]  # bot или error
+    name = "Bot Logs" if log_type == "bot" else "Error Logs"
+
+    await callback.message.edit_text(
+        f"📂 <b>{name}</b>\nВыберите период:",
+        reply_markup=admin_kb.admin_logs_period(log_type),
+        parse_mode="HTML"
+    )
+
+
+# --- ЛОГИ: ОТПРАВКА ---
+@router.callback_query(F.data.startswith("get_log_"))
+async def cb_get_logs(callback: types.CallbackQuery, state: FSMContext):
+    # format: get_log_{type}_{period}
+    parts = callback.data.split("_")
+    log_type = parts[2]
+    period = parts[3]
+
+    base_filename = "bot.log" if log_type == "bot" else "errors.log"
+    log_dir = "logs"
+
+    await callback.answer("⏳ Собираю данные...")
+
+    # --- ВСЕ ФАЙЛЫ (ZIP) ---
+    if period == "all":
+        # Собираем все файлы маски (bot.log*) в архив
+        memory_file = BytesIO()
+        with zipfile.ZipFile(memory_file, 'w') as zf:
+            # Текущий файл
+            if os.path.exists(os.path.join(log_dir, base_filename)):
+                zf.write(os.path.join(log_dir, base_filename), base_filename)
+
+            # Ротированные файлы (bot.log.2023-10-10)
+            for file_path in glob.glob(os.path.join(log_dir, f"{base_filename}.*")):
+                zf.write(file_path, os.path.basename(file_path))
+
+        memory_file.seek(0)
+        input_file = types.BufferedInputFile(memory_file.read(), filename=f"{log_type}_all_logs.zip")
+        await callback.message.answer_document(input_file, caption=f"📦 Все логи ({log_type})")
+        return
+
+    # --- КАСТОМНАЯ ДАТА ---
+    if period == "custom":
+        await callback.message.edit_text(
+            "📆 Введите дату в формате <code>YYYY-MM-DD</code> (например, 2023-10-25):",
+            reply_markup=admin_kb.back_to_admin(),  # Или кнопка отмены
+            parse_mode="HTML"
+        )
+        await state.update_data(log_type=log_type)
+        await state.set_state(AdminState.waiting_for_log_date)  # Нужно добавить это состояние в utils/states.py
+        return
+
+    # --- СБОР ФАЙЛОВ ПО ДАТАМ ---
+    files_to_send = []
+    today_str = datetime.now().strftime("%Y-%m-%d")
+
+    # Список дат, которые нам нужны
+    target_dates = []
+
+    if period == "today":
+        target_dates.append(today_str)
+    elif period == "yesterday":
+        yesterday = (datetime.now() - timedelta(days=1)).strftime("%Y-%m-%d")
+        target_dates.append(yesterday)
+    elif period == "3days":
+        for i in range(3):
+            d = (datetime.now() - timedelta(days=i)).strftime("%Y-%m-%d")
+            target_dates.append(d)
+
+    # Ищем файлы
+    content = ""
+    for date_str in target_dates:
+        # Если дата = сегодня, читаем основной файл (bot.log), НО
+        # TimedRotatingFileHandler пишет в основной файл только сегодняшние логи.
+        # Вчерашние он переименовывает в bot.log.YYYY-MM-DD.
+
+        file_path = ""
+        if date_str == today_str:
+            file_path = os.path.join(log_dir, base_filename)
+        else:
+            file_path = os.path.join(log_dir, f"{base_filename}.{date_str}")
+
+        if os.path.exists(file_path):
+            try:
+                with open(file_path, "r", encoding="utf-8") as f:
+                    file_content = f.read()
+                    if file_content:
+                        content += f"\n\n--- LOGS FOR {date_str} ---\n{file_content}"
+            except Exception as e:
+                content += f"\nError reading {date_str}: {e}"
+
+    if not content.strip():
+        await callback.message.answer("📭 Логи за этот период пусты или не найдены.")
+        return
+
+    # Отправляем файл
+    # Если файл слишком большой, лучше отправить его как документ
+    file_bytes = content.encode("utf-8")
+    input_file = types.BufferedInputFile(file_bytes, filename=f"{log_type}_{period}.log")
+
+    await callback.message.answer_document(input_file, caption=f"📄 Логи: {log_type} ({period})")
+
+
+# --- ОБРАБОТКА ВВОДА ДАТЫ ---
+@router.message(StateFilter(AdminState.waiting_for_log_date))
+async def msg_log_date(message: types.Message, state: FSMContext):
+    date_str = message.text.strip()
+    data = await state.get_data()
+    log_type = data.get("log_type", "bot")
+    base_filename = "bot.log" if log_type == "bot" else "errors.log"
+    log_dir = "logs"
+
+    # Проверка формата
+    try:
+        datetime.strptime(date_str, "%Y-%m-%d")
+    except ValueError:
+        await message.answer("⚠️ Неверный формат. Используйте YYYY-MM-DD.")
+        return
+
+    file_path = os.path.join(log_dir, f"{base_filename}.{date_str}")
+
+    # Если запрашивают сегодня
+    if date_str == datetime.now().strftime("%Y-%m-%d"):
+        file_path = os.path.join(log_dir, base_filename)
+
+    if os.path.exists(file_path):
+        fs_file = FSInputFile(file_path, filename=f"{log_type}_{date_str}.log")
+        await message.answer_document(fs_file, caption=f"📄 Логи за {date_str}")
+    else:
+        await message.answer(f"📭 Файл логов за {date_str} не найден.")
+
+    await state.clear()
 
 
 # --- FORCE CHECK (Принудительная проверка) ---

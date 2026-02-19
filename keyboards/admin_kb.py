@@ -27,3 +27,29 @@ def back_to_admin():
     kb = InlineKeyboardBuilder()
     kb.button(text="🔙 Назад в админку", callback_data="admin_back")
     return kb.as_markup()
+
+
+def admin_logs_menu():
+    kb = InlineKeyboardBuilder()
+    # Тип логов
+    kb.button(text="📄 Bot Logs (Info)", callback_data="logs_type_bot")
+    kb.button(text="❌ Error Logs", callback_data="logs_type_error")
+    kb.adjust(2)
+    kb.button(text="🔙 Назад в админку", callback_data="admin_back")
+    return kb.as_markup()
+
+
+def admin_logs_period(log_type: str):
+    """
+    Клавиатура выбора периода.
+    log_type: 'bot' или 'error'
+    """
+    kb = InlineKeyboardBuilder()
+    kb.button(text="📅 Сегодня", callback_data=f"get_log_{log_type}_today")
+    kb.button(text="yesterday Вчера", callback_data=f"get_log_{log_type}_yesterday")
+    kb.button(text="🗓 Последние 3 дня", callback_data=f"get_log_{log_type}_3days")
+    kb.button(text="📆 Выбрать дату", callback_data=f"get_log_{log_type}_custom")
+    kb.button(text="📁 Скачать всё (ZIP)", callback_data=f"get_log_{log_type}_all")
+    kb.adjust(2)
+    kb.button(text="🔙 Назад", callback_data="admin_logs")
+    return kb.as_markup()
