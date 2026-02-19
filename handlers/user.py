@@ -251,6 +251,162 @@ async def cb_refresh(callback: types.CallbackQuery, state: FSMContext):
     await show_updates_for_vo(callback.message, state, vo)
 
 
+# --- РАСПИСАНИЕ И ПОДПИСКА ---
+@router.callback_query(F.data == "open_schedule")
+async def cb_open_schedule(callback: types.CallbackQuery, state: FSMContext):
+    await callback.answer("📅 Загружаю расписание...")
+
+    # 1. Парсим расписание
+    schedule_items = await parser.get_schedule(callback.bot)
+
+    if schedule_items is None:
+        await callback.message.edit_text(
+            "⚠️ Ошибка получения расписания. Попробуйте позже.",
+            reply_markup=inline.back_button()
+        )
+        return
+
+    if not schedule_items:
+        await callback.message.edit_text(
+            "📭 Расписание пока пусто.",
+            reply_markup=inline.back_button()
+        )
+        return
+
+    lines = ["📅 <b>Ближайшие выходы аниме:</b>\n"]
+    current_day = ""
+
+    # Ограничение ввода, для отсутствия в упор в лимит (надо обойти для отображения всего сразу)
+    limit = 20
+    schedule_items = schedule_items[:limit]
+
+    for i, item in enumerate(schedule_items):
+        # Группировка по дням
+        if item['day'] != current_day:
+            current_day = item['day']
+            lines.append(f"\n📆 <b>{current_day}</b>")
+
+        lines.append(
+            f"<b>{i + 1}.</b> <a href='{item['link']}'>{item['title']}</a> — {item['time']}"
+        )
+
+    lines.append("\n<i>Нажмите номер, чтобы выбрать озвучку и подписаться.</i>")
+
+    await state.update_data(schedule_items=schedule_items)
+    await state.set_state(ScheduleState.viewing_schedule)
+
+    await callback.message.edit_text(
+        "\n".join(lines),
+        reply_markup=inline.schedule_list_actions(len(schedule_items)),
+        parse_mode="HTML",
+        disable_web_page_preview=True
+    )
+
+
+@router.callback_query(F.data.startswith("sched_sel_"), StateFilter(ScheduleState.viewing_schedule))
+async def cb_schedule_item_selected(callback: types.CallbackQuery, state: FSMContext):
+    idx = int(callback.data.split("_")[-1])
+    data = await state.get_data()
+    items = data.get("schedule_items", [])
+
+    if idx >= len(items):
+        await callback.answer("⚠️ Список устарел", show_alert=True)
+        return
+
+    anime = items[idx]
+
+    await callback.answer(f"🔍 {anime['title']}...")
+
+    info = await parser.get_anime_details(anime['link'], callback.bot)
+
+    if not info:
+        await callback.answer("❌ Не удалось получить данные об аниме", show_alert=True)
+        return
+
+    # Проверки (Статус/Тип)
+    if info.get('status') and "Вышел" in info['status']:
+        await callback.message.edit_text(
+            f"⛔️ Нельзя добавить <b>{anime['title']}</b>.\nПричина: Аниме завершено.",
+            reply_markup=inline.back_button(),
+            parse_mode="HTML"
+        )
+        return
+
+    if info.get('type') and "Фильм" in info['type']:
+        await callback.message.edit_text(
+            f"⛔️ Нельзя добавить <b>{anime['title']}</b>.\nПричина: Это фильм.",
+            reply_markup=inline.back_button(),
+            parse_mode="HTML"
+        )
+        return
+
+    # Если озвучек нет
+    voiceovers = info.get('available_voiceovers', [])
+    if not voiceovers:
+        await callback.message.edit_text(
+            f"⚠️ Для аниме <b>{anime['title']}</b> пока нет доступных озвучек.",
+            reply_markup=inline.back_button(),
+            parse_mode="HTML"
+        )
+        return
+
+    await state.update_data(
+        selected_anime_title=anime['title'],
+        selected_anime_url=anime['link'],
+        selected_anime_total=info['total_episodes']
+    )
+
+    await state.set_state(ScheduleState.selecting_voiceover)
+    await callback.message.edit_text(
+        f"📺 <b>{anime['title']}</b>\n"
+        f"Выберите озвучку для подписки:",
+        reply_markup=inline.anime_voiceovers_list(voiceovers),
+        parse_mode="HTML"
+    )
+
+
+@router.callback_query(F.data.startswith("sched_sub_vo_"), StateFilter(ScheduleState.selecting_voiceover))
+async def cb_schedule_sub_finalize(callback: types.CallbackQuery, state: FSMContext):
+    # Получаем выбранную озвучку
+    vo = callback.data.replace("sched_sub_vo_", "")
+
+    data = await state.get_data()
+    title = data.get("selected_anime_title")
+    url = data.get("selected_anime_url")
+    total_eps = data.get("selected_anime_total")
+
+    # Для новой подписки last_episode = "0" (или "Серия 0") нормально, чтобы при выходе новой пришло уведомление.
+
+    success = await db.add_subscription(
+        tg_id=callback.from_user.id,
+        title=title,
+        url=url,
+        last_ep="Серия 0",  # Начальное значение
+        voiceover=vo,
+        total_eps=total_eps
+    )
+
+    total_str = total_eps if total_eps else "?"
+
+    if success:
+        await callback.message.edit_text(
+            f"✅ <b>Подписка оформлена!</b>\n\n"
+            f"📺 {title}\n"
+            f"🎙 {vo}\n"
+            f"📊 Эпизоды: ? / {total_str}",
+            reply_markup=inline.back_button(),
+            parse_mode="HTML"
+        )
+    else:
+        await callback.answer("⚠️ Вы уже подписаны на это сочетание", show_alert=True)
+
+
+@router.callback_query(F.data == "cancel_schedule")
+async def cb_cancel_schedule(callback: types.CallbackQuery, state: FSMContext):
+    await state.clear()
+    await render_main_menu(callback.message, callback.from_user.id, is_edit=True)
+
+
 # --- МОИ ПОДПИСКИ ---
 @router.callback_query(F.data == "my_subs")
 async def cb_my_subs(callback: types.CallbackQuery):
