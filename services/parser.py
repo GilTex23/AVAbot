@@ -34,6 +34,13 @@ logger = logging.getLogger(__name__)
 antispam = AntiSpamNotify(logger)
 
 
+def clean_link(link: str) -> str:
+    if not link: return link
+    if not link.startswith('http'):
+        link = 'https://animego.me' + link
+    return link.split('#')[0].rstrip('/')
+
+
 async def get_html(url: str, session: aiohttp.ClientSession = None, bot: Bot=None):
     """
     Получает HTML через ScraperAPI
@@ -149,9 +156,8 @@ async def get_updates(bot: Bot):
                 meta_text = meta_div.get_text(" ", strip=True)
 
                 if '·' in meta_text:
-                    link = item.get('href')
-                    if link and not link.startswith('http'):
-                        link = 'https://animego.me' + link
+                    raw_link = item.get('href')
+                    link = clean_link(raw_link)
 
                     title_tag = item.find(class_='aw-name')
                     title = title_tag.get_text(strip=True) if title_tag else "Unknown"
@@ -279,9 +285,8 @@ async def get_schedule(bot: Bot):
                 anime_nodes = day_block.find_all(class_='aw-item')
 
                 for anime in anime_nodes:
-                    link = anime.get('href')
-                    if link and not link.startswith('http'):
-                        link = 'https://animego.me' + link
+                    raw_link = anime.get('href')
+                    link = clean_link(raw_link)
 
                     title = anime.find(class_='aw-name').get_text(strip=True)
 
