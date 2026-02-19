@@ -105,27 +105,36 @@ def schedule_day_view(day_index: int, total_days: int, items_count: int):
     [ В меню ]
     """
     kb = InlineKeyboardBuilder()
+    kb_up = InlineKeyboardBuilder()
+    kb_middle = InlineKeyboardBuilder()
+    kb_down = InlineKeyboardBuilder()
 
     # 1. Строка навигации
     prev_idx = day_index - 1 if day_index > 0 else total_days - 1
     next_idx = day_index + 1 if day_index < total_days - 1 else 0
 
-    kb.button(text="⬅️", callback_data=f"sched_day_{prev_idx}")
-    kb.button(text=f"{day_index + 1} / {total_days}", callback_data="ignore")  # Просто счетчик, не кликабельный
-    kb.button(text="➡️", callback_data=f"sched_day_{next_idx}")
+    kb_up.button(text="⬅️", callback_data=f"sched_day_{prev_idx}")
+    kb_up.button(text=f"{day_index + 1} / {total_days}", callback_data="ignore")
+    kb_up.button(text="➡️", callback_data=f"sched_day_{next_idx}")
 
     # 2. Сетка кнопок аниме
     for i in range(items_count):
-        kb.button(text=str(i + 1), callback_data=f"sched_item_{i}")
+        kb_middle.button(text=str(i + 1), callback_data=f"sched_item_{i}")
+
+    kb_down.button(text="🔙 В меню", callback_data="back_home")
 
     # Настраиваем сетку:
     # Первая строка - 3 кнопки (Навигация)
     # Остальные - по 5 кнопок (Аниме)
     # Последняя - 1 (Меню)
-    sizes = [3] + [5] * ((items_count + 4) // 5) + [1]
-    kb.adjust(*sizes)
 
-    kb.button(text="🔙 В меню", callback_data="back_home")
+    kb_up.adjust(3)
+    kb_middle.adjust(5)
+    kb_down.adjust(1)
+
+    kb.attach(kb_up)
+    kb.attach(kb_middle)
+    kb.attach(kb_down)
 
     return kb.as_markup()
 
