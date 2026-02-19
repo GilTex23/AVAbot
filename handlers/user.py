@@ -331,22 +331,24 @@ async def cb_schedule_item_select(callback: types.CallbackQuery, state: FSMConte
     anime = schedule[day_idx]['items'][item_idx]
 
     await callback.answer(f"🔍 {anime['title']}...", cache_time=2)
+    msg = await callback.message.answer("🔍 Проверяю статус аниме...")
 
     info = await parser.get_anime_details(anime['link'], callback.bot)
 
     if not info:
         await callback.answer("❌ Ошибка получения данных", show_alert=True)
+        await msg.edit_text("❌ Ошибка получения данных")
         return
 
     # 2. Проверки
     if info.get('status') and "Вышел" in info['status']:
-        await callback.message.answer(
+        await msg.edit_text(
             f"⛔️ Нельзя добавить <b>{anime['title']}</b>.\nПричина: Аниме завершено.",
             parse_mode="HTML"
         )
         return
     if info.get('type') and "Фильм" in info['type']:
-        await callback.message.answer(
+        await msg.edit_text(
             f"⛔️ Нельзя добавить <b>{anime['title']}</b>.\nПричина: Это фильм.",
             parse_mode="HTML"
         )
@@ -354,7 +356,7 @@ async def cb_schedule_item_select(callback: types.CallbackQuery, state: FSMConte
 
     voiceovers = info.get('available_voiceovers', [])
     if not voiceovers:
-        await callback.message.answer(f"⚠️ Нет озвучек для <b>{anime['title']}</b>.", parse_mode="HTML")
+        await msg.edit_text(f"⚠️ Нет озвучек для <b>{anime['title']}</b>.", parse_mode="HTML")
         return
 
     await state.update_data(
@@ -363,7 +365,7 @@ async def cb_schedule_item_select(callback: types.CallbackQuery, state: FSMConte
         selected_anime_total=info['total_episodes']
     )
 
-    await callback.message.answer(
+    await msg.edit_text(
         f"📺 <b>{anime['title']}</b>\n"
         f"👇 Выберите озвучку для подписки:",
         reply_markup=inline.anime_voiceovers_list(voiceovers),
