@@ -231,6 +231,112 @@ async def get_anime_info(url: str, bot: Bot):
         return None
 
 
+async def get_schedule(bot: Bot):
+    """
+    Парсит виджет расписания на главной странице.
+    :returns: Возвращает список словарей: [{'title': ..., 'link': ..., 'time': ..., 'day': ...}]
+    """
+    async with aiohttp.ClientSession() as session:
+        html_text = await get_html(URL_MAIN, session, bot)
+
+        if not html_text:
+            return None
+
+        soup = bs(html_text, 'html.parser')
+        schedule_widget = soup.find(class_='anime-widget')
+
+        if not schedule_widget:
+            return []
+
+        schedule_items = []
+
+        days = schedule_widget.find_all(class_='aw-day')
+
+        for day in days:
+            day_title_tag = day.find(class_='schedule-day')
+            day_name = day_title_tag.get_text(strip=True) if day_title_tag else ""
+
+            items = day.find_all(class_='aw-item')
+
+            for item in items:
+                try:
+                    link = item.get('href')
+                    if link and not link.startswith('http'):
+                        link = 'https://animego.me' + link
+
+                    title = item.find(class_='aw-name').get_text(strip=True)
+
+                    time_tag = item.find(class_='aw-meta__episode-time')
+                    time_str = time_tag.get_text(strip=True) if time_tag else ""
+
+                    schedule_items.append({
+                        'title': title,
+                        'link': link,
+                        'day': day_name,
+                        'time': time_str
+                    })
+                except Exception as e:
+                    logger.warning(f"Error parsing schedule item: {e}")
+                    continue
+
+        return schedule_items
+
+
+async def get_anime_details(url: str, bot: Bot):
+    """
+    Парсит страницу аниме и возвращает полную информацию + список озвучек.
+    """
+    async with aiohttp.ClientSession() as session:
+        html_text = await get_html(url, session, bot)
+
+    if not html_text:
+        return None
+
+    soup = bs(html_text, 'html.parser')
+    info = {}
+
+    try:
+        def get_value(label_text):
+            label_div = soup.find('div', string=lambda t: t and label_text in t, class_='text-body-tertiary')
+            if label_div:
+                value_div = label_div.find_next_sibling('div')
+                if value_div:
+                    return value_div
+            return None
+
+        type_div = get_value("Тип")
+        info['type'] = type_div.get_text(strip=True) if type_div else None
+
+        status_div = get_value("Статус")
+        info['status'] = status_div.get_text(strip=True) if status_div else None
+
+        episodes_div = get_value("Эпизоды")
+        info['total_episodes'] = None
+        if episodes_div:
+            ep_text = episodes_div.get_text(strip=True)
+            parts = ep_text.split('/')
+            if len(parts) == 2 and parts[1].strip().isdigit():
+                info['total_episodes'] = int(parts[1].strip())
+
+        voiceover_div = get_value("Озвучка")
+        voiceovers_list = []
+
+        if voiceover_div:
+            links = voiceover_div.find_all('a', href=lambda h: h and '/anime/dubbing/' in h)
+            for link in links:
+                vo_name = link.get_text(strip=True)
+                if vo_name:
+                    voiceovers_list.append(vo_name)
+
+        info['available_voiceovers'] = voiceovers_list
+
+        return info
+
+    except Exception as e:
+        logger.error(f"Error parsing anime details {url}: {e}")
+        return None
+
+
 async def get_filtered(vo: str, bot: Bot):
     """
     Возвращает СПИСОК аниме (list of dict), отфильтрованный по озвучке.
@@ -250,43 +356,3 @@ async def get_filtered(vo: str, bot: Bot):
             filtered_anime.append(anime)
 
     return filtered_anime
-
-
-async def search_anime(query: str, bot: Bot):
-    """Поиск аниме (для функционала подписки)"""
-    encoded_query = urllib.parse.quote(query)
-    url = f"{URL_SEARCH}{encoded_query}"
-
-    async with aiohttp.ClientSession() as session:
-        html_text = await get_html(url, session, bot)
-
-        if html_text is None:
-            return None
-
-        if not html_text:
-            return []
-
-        soup = bs(html_text, 'html.parser')
-        results = []
-
-        # Логика поиска зависит от верстки страницы поиска
-        content_divs = soup.find_all('div', class_='media-body')
-
-        for item in content_divs:
-            try:
-                link_tag = item.find('a')
-                if not link_tag:
-                    continue
-
-                href = link_tag.get('href')
-                full_link = href if href.startswith('http') else 'https://animego.me' + href
-                title = link_tag.get_text(strip=True)
-
-                last_ep = "0"
-
-                results.append({'title': title, 'url': full_link, 'last_ep': last_ep})
-            except Exception as e:
-                logger.warning(f"Error parsing search result: {e}")
-                continue
-
-        return results[:10]
