@@ -97,13 +97,46 @@ def schedule_list_actions(items_count: int):
     return kb.as_markup()
 
 
-def anime_voiceovers_list(voiceovers: list):
+def schedule_day_view(day_index: int, total_days: int, items_count: int):
     """
-    Генерирует кнопки с названиями доступных озвучек.
+    Клавиатура расписания с навигацией по дням.
+    [ ⬅️ ] [ День X ] [ ➡️ ]
+    [ 1 ] [ 2 ] [ 3 ] [ 4 ] [ 5 ] ...
+    [ В меню ]
     """
     kb = InlineKeyboardBuilder()
 
+    # 1. Строка навигации
+    prev_idx = day_index - 1 if day_index > 0 else total_days - 1
+    next_idx = day_index + 1 if day_index < total_days - 1 else 0
+
+    kb.button(text="⬅️", callback_data=f"sched_day_{prev_idx}")
+    kb.button(text=f"{day_index + 1} / {total_days}", callback_data="ignore")  # Просто счетчик, не кликабельный
+    kb.button(text="➡️", callback_data=f"sched_day_{next_idx}")
+
+    # 2. Сетка кнопок аниме
+    for i in range(items_count):
+        kb.button(text=str(i + 1), callback_data=f"sched_item_{i}")
+
+    # Настраиваем сетку:
+    # Первая строка - 3 кнопки (Навигация)
+    # Остальные - по 5 кнопок (Аниме)
+    # Последняя - 1 (Меню)
+    sizes = [3] + [5] * ((items_count + 4) // 5) + [1]
+    kb.adjust(*sizes)
+
+    kb.button(text="🔙 В меню", callback_data="back_home")
+
+    return kb.as_markup()
+
+
+def anime_voiceovers_list(voiceovers: list):
+    """
+    Кнопки выбора озвучки (для нового сообщения).
+    """
+    kb = InlineKeyboardBuilder()
     for vo in voiceovers:
+        # Обрезаем название, чтобы влезло в callback_data (макс 64 байта)
         kb.button(text=vo, callback_data=f"sched_sub_vo_{vo[:40]}")
 
     kb.adjust(2)

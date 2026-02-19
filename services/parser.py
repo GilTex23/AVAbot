@@ -233,8 +233,18 @@ async def get_anime_info(url: str, bot: Bot):
 
 async def get_schedule(bot: Bot):
     """
-    Парсит виджет расписания на главной странице.
-    :returns: Возвращает список словарей: [{'title': ..., 'link': ..., 'time': ..., 'day': ...}]
+    Парсит виджет расписания.
+    Возвращает список дней:
+    [
+        {
+            'date_str': 'Понедельник 23 февраля',
+            'items': [
+                {'title': '...', 'link': '...', 'time': '...'},
+                ...
+            ]
+        },
+        ...
+    ]
     """
     async with aiohttp.ClientSession() as session:
         html_text = await get_html(URL_MAIN, session, bot)
@@ -248,38 +258,53 @@ async def get_schedule(bot: Bot):
         if not schedule_widget:
             return []
 
-        schedule_items = []
+        schedule_days = []
 
-        days = schedule_widget.find_all(class_='aw-day')
+        # Находим все блоки дней
+        day_blocks = schedule_widget.find_all(class_='aw-day')
 
-        for day in days:
-            day_title_tag = day.find(class_='schedule-day')
-            day_name = day_title_tag.get_text(strip=True) if day_title_tag else ""
+        for day_block in day_blocks:
+            try:
+                # 1. Заголовок дня (День + Дата)
+                day_name_tag = day_block.find(class_='schedule-day')
+                day_date_tag = day_block.find(class_='schedule-date')
 
-            items = day.find_all(class_='aw-item')
+                day_name = day_name_tag.get_text(strip=True) if day_name_tag else "???"
+                day_date = day_date_tag.get_text(strip=True) if day_date_tag else ""
 
-            for item in items:
-                try:
-                    link = item.get('href')
+                full_date_str = f"{day_name} {day_date}".strip()
+
+                # 2. Список аниме в этот день
+                items = []
+                anime_nodes = day_block.find_all(class_='aw-item')
+
+                for anime in anime_nodes:
+                    link = anime.get('href')
                     if link and not link.startswith('http'):
                         link = 'https://animego.me' + link
 
-                    title = item.find(class_='aw-name').get_text(strip=True)
+                    title = anime.find(class_='aw-name').get_text(strip=True)
 
-                    time_tag = item.find(class_='aw-meta__episode-time')
+                    time_tag = anime.find(class_='aw-meta__episode-time')
                     time_str = time_tag.get_text(strip=True) if time_tag else ""
 
-                    schedule_items.append({
+                    items.append({
                         'title': title,
                         'link': link,
-                        'day': day_name,
                         'time': time_str
                     })
-                except Exception as e:
-                    logger.warning(f"Error parsing schedule item: {e}")
-                    continue
 
-        return schedule_items
+                if items:
+                    schedule_days.append({
+                        'date_str': full_date_str,
+                        'items': items
+                    })
+
+            except Exception as e:
+                logger.warning(f"Error parsing schedule day: {e}")
+                continue
+
+        return schedule_days
 
 
 async def get_anime_details(url: str, bot: Bot):
