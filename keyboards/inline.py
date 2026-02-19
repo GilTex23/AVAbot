@@ -6,7 +6,7 @@ def main_menu():
     kb = InlineKeyboardBuilder()
     kb.button(text="🔥 Свежие серии (Любимая)", callback_data="get_updates_default")
     kb.button(text="🎙 Другая озвучка", callback_data="select_other_vo")
-    kb.button(text="🔍 Поиск аниме", callback_data="search_anime")
+    kb.button(text="📅 Расписание (Добавить)", callback_data="open_schedule")
     kb.button(text="📋 Мои подписки", callback_data="my_subs")
     kb.button(text="⚙️ Настройки любимой", callback_data="settings")
     kb.adjust(1)
@@ -81,6 +81,33 @@ def subs_list_actions(subscriptions: list):
     control_kb = InlineKeyboardBuilder()
     control_kb.button(text="🔙 Назад", callback_data="back_home")
     kb.attach(control_kb)
+    return kb.as_markup()
+
+
+def schedule_list_actions(items_count: int):
+    """
+    Кнопки-цифры для выбора аниме из расписания.
+    """
+    kb = InlineKeyboardBuilder()
+    for index in range(items_count):
+        kb.button(text=str(index + 1), callback_data=f"sched_sel_{index}")
+
+    kb.adjust(5)
+    kb.attach(InlineKeyboardBuilder().button(text="🔙 В меню", callback_data="back_home"))
+    return kb.as_markup()
+
+
+def anime_voiceovers_list(voiceovers: list):
+    """
+    Генерирует кнопки с названиями доступных озвучек.
+    """
+    kb = InlineKeyboardBuilder()
+
+    for vo in voiceovers:
+        kb.button(text=vo, callback_data=f"sched_sub_vo_{vo[:40]}")
+
+    kb.adjust(2)
+    kb.attach(InlineKeyboardBuilder().button(text="❌ Отмена", callback_data="cancel_schedule"))
     return kb.as_markup()
 
 
