@@ -128,11 +128,13 @@ async def get_html(url: str, session: aiohttp.ClientSession = None, bot: Bot=Non
 async def get_updates(bot: Bot):
     """
     Парсит главную страницу и возвращает список свежих серий.
+    Возвращает None при ошибке сети/парсинга.
     """
     async with aiohttp.ClientSession() as session:
         html_text = await get_html(URL_MAIN, session, bot)
-        if not html_text:
-            return []
+
+        if html_text is None:
+            return None
 
         soup = bs(html_text, 'html.parser')
         all_items = soup.find_all(class_='aw-item')
@@ -142,12 +144,10 @@ async def get_updates(bot: Bot):
         for item in all_items:
             try:
                 meta_div = item.find(class_='aw-meta')
-                if not meta_div:
-                    continue
+                if not meta_div: continue
 
                 meta_text = meta_div.get_text(" ", strip=True)
 
-                # Если есть точка, значит есть инфо об озвучке
                 if '·' in meta_text:
                     link = item.get('href')
                     if link and not link.startswith('http'):
@@ -156,9 +156,8 @@ async def get_updates(bot: Bot):
                     title_tag = item.find(class_='aw-name')
                     title = title_tag.get_text(strip=True) if title_tag else "Unknown"
 
-                    # Парсинг строки "Серия 3 · AniStar — Сегодня, 15:30"
                     parts = meta_text.split('·')
-                    episode_num = parts[0].strip()  # "Серия 3"
+                    episode_num = parts[0].strip()
 
                     rest_part = parts[1]
                     studio = "Unknown"
@@ -235,12 +234,15 @@ async def get_anime_info(url: str, bot: Bot):
 async def get_filtered(vo: str, bot: Bot):
     """
     Возвращает СПИСОК аниме (list of dict), отфильтрованный по озвучке.
+    Возвращает None, если произошла ошибка при получении данных.
     """
     updates = await get_updates(bot)
 
+    if updates is None:
+        return None
+
     filtered_anime = []
     for anime in updates:
-        # Очистка названия студии от лишних пробелов для точного сравнения
         anime_studio_clean = anime['studio'].strip().lower()
         vo_clean = vo.strip().lower()
 
@@ -256,7 +258,10 @@ async def search_anime(query: str, bot: Bot):
     url = f"{URL_SEARCH}{encoded_query}"
 
     async with aiohttp.ClientSession() as session:
-        html_text = await get_html(url, session)
+        html_text = await get_html(url, session, bot)
+
+        if html_text is None:
+            return None
 
         if not html_text:
             return []

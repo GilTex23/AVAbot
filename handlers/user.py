@@ -47,6 +47,16 @@ async def show_updates_for_vo(message: types.Message, state: FSMContext, vo: str
 
     updates = await parser.get_filtered(vo, message.bot)
 
+    if updates is None:
+        await message.edit_text(
+            "⚠️ <b>Ошибка получения данных.</b>\n"
+            "Сервис временно недоступен или произошла ошибка сети.\n"
+            "Пожалуйста, повторите попытку позже.",
+            reply_markup=inline.back_button(),
+            parse_mode="HTML"
+        )
+        return
+
     if not updates:
         await state.update_data(current_updates=updates, current_vo=vo)
         await state.set_state(UpdatesState.viewing_list)
