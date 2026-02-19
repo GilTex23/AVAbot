@@ -48,12 +48,15 @@ async def get_user_voiceover(tg_id: int):
 
 # --- SUBSCRIPTIONS ---
 async def add_subscription(tg_id: int, title: str, url: str, last_ep: str, voiceover: str, total_eps: int = None):
+    """Добавляет подписку с конкретной озвучкой"""
     async with async_session() as session:
+        clean_url = url.split('#')[0].rstrip('/')
+
         existing = await session.scalar(
             select(Subscription).where(
                 and_(
                     Subscription.user_id == tg_id,
-                    Subscription.anime_url == url,
+                    Subscription.anime_url == clean_url,  # <-- Ищем по чистому URL
                     Subscription.voiceover == voiceover
                 )
             )
@@ -64,7 +67,7 @@ async def add_subscription(tg_id: int, title: str, url: str, last_ep: str, voice
         session.add(Subscription(
             user_id=tg_id,
             anime_title=title,
-            anime_url=url,
+            anime_url=clean_url,
             last_episode=last_ep,
             voiceover=voiceover,
             total_episodes=total_eps
