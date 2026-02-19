@@ -49,6 +49,7 @@ async def get_html(url: str, session: aiohttp.ClientSession = None, bot: Bot=Non
     check_attempt = lambda x_: True if x_ <= 7 else False
     while True:
         try:
+            return None
             if api_keys:
                 api_key = choice(api_keys)
             else:
