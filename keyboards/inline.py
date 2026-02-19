@@ -149,7 +149,7 @@ def anime_voiceovers_list(voiceovers: list):
         kb.button(text=vo, callback_data=f"sched_sub_vo_{vo[:40]}")
 
     kb.adjust(2)
-    kb.attach(InlineKeyboardBuilder().button(text="❌ Отмена", callback_data="cancel_schedule"))
+    kb.attach(InlineKeyboardBuilder().button(text="❌ Отмена", callback_data="close_message"))
     return kb.as_markup()
 
 
