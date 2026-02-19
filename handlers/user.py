@@ -7,7 +7,7 @@ from contextlib import suppress
 from database import requests as db
 from keyboards import inline
 from services import parser
-from utils.states import SearchState, UpdatesState
+from utils.states import UpdatesState, ScheduleState
 import logging
 
 router = Router()
@@ -249,84 +249,6 @@ async def cb_refresh(callback: types.CallbackQuery, state: FSMContext):
 
     await callback.answer("🔄 Обновляю список...")
     await show_updates_for_vo(callback.message, state, vo)
-
-
-# --- ПОИСК АНИМЕ (FSM) ---
-@router.callback_query(F.data == "search_anime")
-async def cb_search_start(callback: types.CallbackQuery, state: FSMContext):
-    await callback.answer("🔍 Режим поиска")
-    await callback.message.edit_text(
-        "🖊 <b>Поиск аниме</b>\n\n"
-        "Введите название аниме сообщением ниже:",
-        reply_markup=inline.back_button(),
-        parse_mode="HTML"
-    )
-    await state.set_state(SearchState.waiting_for_title)
-
-
-@router.message(StateFilter(SearchState.waiting_for_title))
-async def process_search(message: types.Message, state: FSMContext):
-    # Тут нельзя редактировать сообщение бота, так как триггер - сообщение юзера.
-    # Приходится слать новое.
-    query = message.text
-    msg = await message.answer("🔍 <b>Ищу...</b>", parse_mode="HTML")
-
-    results = await parser.search_anime(query, message.bot)
-
-    if not results:
-        await msg.edit_text(
-            f"😔 По запросу «{query}» ничего не найдено.",
-            reply_markup=inline.back_button()
-        )
-        return
-
-    data_storage = {res['url']: res for res in results}
-    await state.update_data(search_res=data_storage)
-
-    await msg.edit_text(
-        f"🔎 Результаты по запросу «<b>{query}</b>»:\n"
-        "Выберите, чтобы подписаться (используется ваша любимая озвучка):",
-        reply_markup=inline.search_results(results),
-        parse_mode="HTML"
-    )
-
-
-# --- ПОДПИСКА (ИЗ ПОИСКА) ---
-@router.callback_query(F.data.startswith("sub|"))
-async def cb_subscribe(callback: types.CallbackQuery, state: FSMContext):
-    url = callback.data.split("sub|")[1]
-    fsm_data = await state.get_data()
-    search_res = fsm_data.get("search_res", {})
-    anime_data = search_res.get(url)
-
-    if not anime_data:
-        await callback.answer("⚠️ Данные устарели, повторите поиск", show_alert=True)
-        return
-
-    user = await db.get_user(callback.from_user.id)
-    preferred_vo = user.favorite_voiceover if user else "Все"
-
-    success = await db.add_subscription(
-        tg_id=callback.from_user.id,
-        title=anime_data['title'],
-        url=anime_data['url'],
-        last_ep=anime_data['last_ep'],
-        voiceover=preferred_vo  # Используем дефолтную
-    )
-
-    if success:
-        await callback.answer(f"✅ Подписка оформлена ({preferred_vo})!", show_alert=True)
-    else:
-        await callback.answer("⚠️ Вы уже подписаны на это аниме", show_alert=True)
-
-    # Возвращаем в список подписок (редактируем текущее)
-    await cb_my_subs(callback)
-
-
-@router.callback_query(F.data == "cancel_search")
-async def cb_cancel_search(callback: types.CallbackQuery, state: FSMContext):
-    await state.clear()
-    await render_main_menu(callback.message, callback.from_user.id, is_edit=True)
 
 
 # --- МОИ ПОДПИСКИ ---
