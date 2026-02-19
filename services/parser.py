@@ -73,24 +73,21 @@ async def get_html(url: str, session: aiohttp.ClientSession = None, bot: Bot=Non
             async with session.get(SCRAPER_API_URL, params=params, timeout=aiohttp.ClientTimeout(total=30)) as response:
                 logger.info(f"ScraperAPI request to {url} - Status: {response.status} - Used API name: {api_key[0]}")
                 if response.status == 200:
-                    pass
+                    return await response.text()
                 elif response.status in [500, 404, 429, 400, 403, 401]:
                     if check_attempt(attempt):
                         if response.status == 500:
                             logger.error(f"Request failed. It's worth checking the URL - Attempt {attempt}")
                             attempt += 1
                             await asyncio.sleep(1)
-                            continue
                         elif response.status == 404:
                             logger.error(f"Bad Gateway - The requested page does not exist - Attempt {attempt}")
                             attempt += 5
                             await asyncio.sleep(0.3)
-                            continue
                         elif response.status == 429:
                             logger.error(f"To many concurrent requests - Attempt {attempt}")
                             attempt += 1
                             await asyncio.sleep(0.3)
-                            continue
                         elif response.status == 400:
                             logger.error(f"Error, invalid request. Make sure that your URL is entered correctly - Attempt {attempt}")
                             attempt += 5
@@ -100,12 +97,13 @@ async def get_html(url: str, session: aiohttp.ClientSession = None, bot: Bot=Non
                             api_keys.remove(api_key)
                             attempt += 1
                             await asyncio.sleep(0.1)
-                            continue
                         elif response.status == 401:
                             logger.error(f"An unauthorized request. Please make sure that your API key \"{api_key[0]}\" is valid.")
                             api_keys.remove(api_key)
                             await asyncio.sleep(0.1)
-                            continue
+                        continue
+                    else:
+                        logger.critical("Too many attempts.")
                 else:
                     try:
                         error_text = await response.text()
@@ -114,9 +112,8 @@ async def get_html(url: str, session: aiohttp.ClientSession = None, bot: Bot=Non
                         logger.error(f"Response text: {error_text[:900]}")
                     except Exception as e:
                         logger.error(f"Failed to get error text: {e}")
-                    return None
 
-                return await response.text()
+                return None
 
         except asyncio.TimeoutError:
             logger.error(f"Timeout error for {url}")
