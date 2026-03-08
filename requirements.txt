@@ -12,3 +12,4 @@ future>=1.0.0
 bs4>=0.0.2
 sqladmin>=0.23.0
 starlette>=0.52.1
+itsdangerous
