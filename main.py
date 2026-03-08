@@ -2,6 +2,7 @@ import logging
 from contextlib import asynccontextmanager
 from fastapi import FastAPI, Request
 from fastapi.responses import PlainTextResponse
+from uvicorn.middleware.proxy_headers import ProxyHeadersMiddleware
 from aiogram import types
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from datetime import datetime
@@ -69,6 +70,8 @@ async def lifespan(app: FastAPI):
 
 app = FastAPI(lifespan=lifespan)
 
+app.add_middleware(ProxyHeadersMiddleware, trusted_hosts="*")
+
 admin_panel = Admin(app, engine, authentication_backend=authentication_backend, title="AnimeBot Admin")
 admin_panel.add_view(UserAdmin)
 admin_panel.add_view(SubscriptionAdmin)
@@ -82,6 +85,7 @@ async def robots_txt():
     lines = [
         "User-agent: *",
         "Disallow: /admin",
+        "Disallow: /docs",
         f"Disallow: {config.WEBHOOK_PATH}"
     ]
     return "\n".join(lines)
