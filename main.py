@@ -1,9 +1,12 @@
 import logging
 from contextlib import asynccontextmanager
 from fastapi import FastAPI, Request
+from fastapi.responses import PlainTextResponse
 from aiogram import types
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from datetime import datetime
+
+from sqladmin import Admin
 
 import config
 from loader import bot, dp
@@ -12,7 +15,9 @@ from middlewares.callback import CallbackAnswerMiddleware
 from services.logger import setup_logger
 from services.checker import check_updates, check_missing_episodes_info
 from services.notifier import notify_admins
-from database.requests import init_db
+from database.requests import init_db, engine
+
+from services.admin_panel import authentication_backend, UserAdmin, SubscriptionAdmin
 
 logger = setup_logger(config.LOG_LEVEL)
 
@@ -63,6 +68,23 @@ async def lifespan(app: FastAPI):
 
 
 app = FastAPI(lifespan=lifespan)
+
+admin_panel = Admin(app, engine, authentication_backend=authentication_backend, title="AnimeBot Admin")
+admin_panel.add_view(UserAdmin)
+admin_panel.add_view(SubscriptionAdmin)
+
+
+@app.get("/robots.txt", response_class=PlainTextResponse)
+async def robots_txt():
+    """
+    Запрещаем индексацию админ-панели и пути вебхука поисковыми ботами.
+    """
+    lines = [
+        "User-agent: *",
+        "Disallow: /admin",
+        f"Disallow: {config.WEBHOOK_PATH}"
+    ]
+    return "\n".join(lines)
 
 
 @app.post(config.WEBHOOK_PATH)
