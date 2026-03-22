@@ -70,7 +70,8 @@ async def check_updates(bot: Bot):
                                 if sub.total_episodes and new_ep_num >= sub.total_episodes:
                                     await bot.send_message(
                                         sub.user_id,
-                                        f"🏁 Аниме <b>{update['title']}</b> ({user_vo}) завершено! Удаляю из подписок."
+                                        f"🏁 Аниме <b>{update['title']}</b> ({user_vo}) завершено! Удаляю из подписок.",
+                                        parse_mode="HTML"
                                     )
                                     await db.delete_subscription(sub.id)
                                     logger.info(f"Anime finished and removed: {sub.anime_title}")
