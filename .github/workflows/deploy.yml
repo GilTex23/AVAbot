@@ -16,6 +16,8 @@ jobs:
           key: ${{ secrets.SSH_PRIVATE_KEY }}
           port: 22
           script: |
+            set -e
+
             cd /home/${{ secrets.USERNAME }}
 
             if [ ! -d "AVAbot" ]; then
