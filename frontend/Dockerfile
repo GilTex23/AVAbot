@@ -1,6 +1,8 @@
 FROM node:20-alpine AS build
 
 WORKDIR /app
+ARG VITE_BOT_URL=https://t.me/YOUR_BOT_USERNAME
+ENV VITE_BOT_URL=$VITE_BOT_URL
 
 COPY package*.json ./
 RUN npm install

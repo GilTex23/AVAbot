@@ -4,7 +4,7 @@ import { Badge } from "../components/ui/badge";
 import { Button } from "../components/ui/button";
 import { Card } from "../components/ui/card";
 import { LazyImage } from "../components/ui/LazyImage";
-import { getUpdates } from "../services/api";
+import { addSubscription, getUpdates } from "../services/api";
 import type { UpdateItem } from "../lib/types";
 import { openAnime, voiceovers } from "../lib/utils";
 
@@ -17,6 +17,7 @@ export function Updates({ favoriteVoiceover, refreshKey }: UpdatesProps) {
   const [selectedVoiceover, setSelectedVoiceover] = useState(favoriteVoiceover || "AniLiberty");
   const [items, setItems] = useState<UpdateItem[]>([]);
   const [loading, setLoading] = useState(true);
+  const [pendingLink, setPendingLink] = useState<string | null>(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -31,6 +32,15 @@ export function Updates({ favoriteVoiceover, refreshKey }: UpdatesProps) {
       cancelled = true;
     };
   }, [selectedVoiceover, refreshKey]);
+
+  async function subscribe(item: UpdateItem) {
+    setPendingLink(item.link);
+    try {
+      await addSubscription(item);
+    } finally {
+      setPendingLink(null);
+    }
+  }
 
   return (
     <div className="page-stack">
@@ -64,9 +74,9 @@ export function Updates({ favoriteVoiceover, refreshKey }: UpdatesProps) {
                 </div>
                 <h2>{item.title}</h2>
                 <div className="anime-row__actions">
-                  <Button size="sm" variant="primary">
+                  <Button size="sm" variant="primary" disabled={pendingLink === item.link} onClick={() => subscribe(item)}>
                     <Plus size={16} />
-                    Подписаться
+                    {pendingLink === item.link ? "Добавляю" : "Подписаться"}
                   </Button>
                   <Button size="sm" variant="ghost" onClick={() => openAnime(item.link)}>
                     <ExternalLink size={16} />

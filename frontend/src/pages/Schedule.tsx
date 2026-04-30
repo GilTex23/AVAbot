@@ -1,8 +1,9 @@
-import { Clock, ExternalLink } from "lucide-react";
-import { useEffect, useState } from "react";
+import { Clock, ExternalLink, Search } from "lucide-react";
+import { useEffect, useMemo, useState } from "react";
 import { Badge } from "../components/ui/badge";
 import { Button } from "../components/ui/button";
 import { Card } from "../components/ui/card";
+import { Input } from "../components/ui/input";
 import { LazyImage } from "../components/ui/LazyImage";
 import { getSchedule } from "../services/api";
 import type { ScheduleDay } from "../lib/types";
@@ -14,48 +15,69 @@ type ScheduleProps = {
 
 export function Schedule({ refreshKey }: ScheduleProps) {
   const [days, setDays] = useState<ScheduleDay[]>([]);
-  const [activeDay, setActiveDay] = useState(0);
+  const [query, setQuery] = useState("");
 
   useEffect(() => {
     getSchedule().then((data) => setDays(data.days));
   }, [refreshKey]);
 
-  const currentDay = days[activeDay];
+  const filteredDays = useMemo(() => {
+    const normalized = query.trim().toLowerCase();
+    if (!normalized) {
+      return days;
+    }
+    return days
+      .map((day) => ({
+        ...day,
+        items: day.items.filter((item) => item.title.toLowerCase().includes(normalized)),
+      }))
+      .filter((day) => day.items.length > 0);
+  }, [days, query]);
 
   return (
     <div className="page-stack">
       <section className="section-title">
-        <h1>Расписание</h1>
-        <p>Выходы серий по дням</p>
+        <div>
+          <h1>Расписание</h1>
+          <p>Все дни недели с поиском по тайтлам</p>
+        </div>
       </section>
 
-      <div className="chip-row">
-        {days.map((day, index) => (
-          <button key={`${day.date_str}-${index}`} className={index === activeDay ? "chip chip--active" : "chip"} type="button" onClick={() => setActiveDay(index)}>
-            {day.date_str}
-          </button>
-        ))}
-      </div>
+      <label className="search-field">
+        <Search size={18} />
+        <Input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Найти в расписании" />
+      </label>
 
-      <div className="compact-list">
-        {currentDay?.items.map((item) => (
-          <Card key={`${item.link}-${item.time}`} className="schedule-row">
-            <LazyImage className="schedule-row__poster" src={item.poster_url} alt={item.title} />
-            <div className="schedule-row__body">
-              <Badge tone="muted">
-                <Clock size={14} />
-                {item.time || "В течение дня"}
-              </Badge>
-              <h2>{item.title}</h2>
+      <div className="schedule-days">
+        {filteredDays.map((day, dayIndex) => (
+          <section key={`${day.date_str}-${dayIndex}`} className="schedule-day">
+            <div className="schedule-day__head">
+              <h2>{day.date_str}</h2>
+              <Badge tone="muted">{day.items.length}</Badge>
             </div>
-            <Button size="icon" variant="ghost" aria-label="Открыть" onClick={() => openAnime(item.link)}>
-              <ExternalLink size={18} />
-            </Button>
-          </Card>
+            <div className="compact-list">
+              {day.items.map((item) => (
+                <Card key={`${day.date_str}-${item.link}-${item.time}`} className="schedule-row">
+                  <LazyImage className="schedule-row__poster" src={item.poster_url} alt={item.title} />
+                  <div className="schedule-row__body">
+                    <Badge tone="muted">
+                      <Clock size={14} />
+                      {item.time || "В течение дня"}
+                    </Badge>
+                    <h2>{item.title}</h2>
+                  </div>
+                  <Button size="icon" variant="ghost" aria-label="Открыть" onClick={() => openAnime(item.link)}>
+                    <ExternalLink size={18} />
+                  </Button>
+                </Card>
+              ))}
+            </div>
+          </section>
         ))}
       </div>
 
-      {!currentDay ? <Card className="empty-state">Расписание пока не загружено.</Card> : null}
+      {days.length === 0 ? <Card className="empty-state">Расписание пока не загружено.</Card> : null}
+      {days.length > 0 && filteredDays.length === 0 ? <Card className="empty-state">По этому запросу ничего не найдено.</Card> : null}
     </div>
   );
 }

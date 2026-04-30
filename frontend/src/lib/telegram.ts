@@ -24,6 +24,10 @@ export function getTelegramInitData() {
   return getTelegramWebApp()?.initData || "";
 }
 
+export function isTelegramMiniApp() {
+  return Boolean(getTelegramInitData()) || Boolean(import.meta.env.VITE_DEV_TG_ID);
+}
+
 export function bootTelegramShell() {
   const app = getTelegramWebApp();
   app?.ready?.();

@@ -35,7 +35,14 @@ authentication_backend = AdminAuth(secret_key=config.ADMIN_PANEL_SECRET)
 
 # Настройка отображения таблицы Users
 class UserAdmin(ModelView, model=User):
-    column_list = [User.id, User.username, User.favorite_voiceover, User.registered_at]
+    column_list = [
+        User.id,
+        User.username,
+        User.favorite_voiceover,
+        User.quiet_hours_enabled,
+        User.quiet_timezone,
+        User.registered_at,
+    ]
     column_searchable_list = [User.id, User.username]
     column_sortable_list = [User.registered_at, User.id]
     column_default_sort = ("registered_at", True)

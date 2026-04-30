@@ -10,8 +10,9 @@ async_session = async_sessionmaker(engine, expire_on_commit=False)
 
 
 async def init_db():
+    """Keep a lightweight startup DB check; schema changes are handled by Alembic."""
     async with engine.begin() as conn:
-        await conn.run_sync(Base.metadata.create_all)
+        await conn.execute(text("SELECT 1"))
 
 
 # --- USER ---
@@ -30,12 +31,50 @@ async def add_user(tg_id: int, username: str):
         return False
 
 
+async def upsert_user_profile(tg_id: int, username: str | None = None, photo_url: str | None = None):
+    async with async_session() as session:
+        user = await session.scalar(select(User).where(User.id == tg_id))
+        if not user:
+            user = User(id=tg_id, username=username, photo_url=photo_url, favorite_voiceover=None)
+            session.add(user)
+        else:
+            if username is not None:
+                user.username = username
+            if photo_url is not None:
+                user.photo_url = photo_url
+
+        await session.commit()
+        await session.refresh(user)
+        return user
+
+
 async def update_user_voiceover(tg_id: int, vo: str):
     async with async_session() as session:
         await session.execute(
             update(User)
             .where(User.id == tg_id)
             .values(favorite_voiceover=vo)
+        )
+        await session.commit()
+
+
+async def update_user_quiet_hours(
+    tg_id: int,
+    enabled: bool,
+    start: str,
+    end: str,
+    timezone: str,
+):
+    async with async_session() as session:
+        await session.execute(
+            update(User)
+            .where(User.id == tg_id)
+            .values(
+                quiet_hours_enabled=enabled,
+                quiet_hours_start=start,
+                quiet_hours_end=end,
+                quiet_timezone=timezone,
+            )
         )
         await session.commit()
 

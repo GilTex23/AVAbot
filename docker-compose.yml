@@ -10,14 +10,18 @@ services:
     ports:
       - "8001:8000"
     depends_on:
-      - db
+      db:
+        condition: service_healthy
     volumes:
       - ./logs:/app/logs
+      - ./backend/migrations:/app/backend/migrations
 
   frontend:
     build:
       context: ./frontend
       dockerfile: Dockerfile
+      args:
+        VITE_BOT_URL: ${MINIAPP_BOT_URL:-https://t.me/YOUR_BOT_USERNAME}
     container_name: anime_frontend
     restart: always
     ports:
@@ -37,6 +41,11 @@ services:
       - postgres_data:/var/lib/postgresql/data
     ports:
       - "5432:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $$POSTGRES_USER -d $$POSTGRES_DB"]
+      interval: 5s
+      timeout: 5s
+      retries: 12
 
 volumes:
   postgres_data:

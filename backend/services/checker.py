@@ -5,6 +5,8 @@ from utils.antispam import AntiSpamNotify
 from database import requests as db
 import logging
 import re
+from datetime import datetime, time as dt_time
+from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 
 logger = logging.getLogger(__name__)
@@ -17,6 +19,37 @@ def extract_episode_number(ep_str: str) -> float:
     # Ищем числа (включая дробные)
     match = re.search(r"(\d+(\.\d+)?)", ep_str)
     return float(match.group(1)) if match else 0
+
+
+def _parse_time(value: str | None, fallback: dt_time) -> dt_time:
+    if not value:
+        return fallback
+    try:
+        hour, minute = value.split(":", 1)
+        return dt_time(hour=int(hour), minute=int(minute))
+    except (TypeError, ValueError):
+        return fallback
+
+
+def _is_time_inside_range(current: dt_time, start: dt_time, end: dt_time) -> bool:
+    if start <= end:
+        return start <= current < end
+    return current >= start or current < end
+
+
+def _is_quiet_now(user) -> bool:
+    if not user or not getattr(user, "quiet_hours_enabled", False):
+        return False
+
+    try:
+        zone = ZoneInfo(user.quiet_timezone or "Europe/Moscow")
+    except ZoneInfoNotFoundError:
+        zone = ZoneInfo("Europe/Moscow")
+
+    now = datetime.now(zone).time()
+    start = _parse_time(user.quiet_hours_start, dt_time(23, 0))
+    end = _parse_time(user.quiet_hours_end, dt_time(9, 0))
+    return _is_time_inside_range(now, start, end)
 
 
 async def check_updates(bot: Bot):
@@ -41,6 +74,9 @@ async def check_updates(bot: Bot):
                     vo_clean = user_vo.strip().lower()
 
                     if user_vo == "Все" or vo_clean in studio_clean:
+                        if _is_quiet_now(sub.user):
+                            logger.info(f"Skipped quiet-hours notification for {sub.user_id}")
+                            continue
 
                         # Числовое сравнение серий
                         old_ep_num = extract_episode_number(sub.last_episode)

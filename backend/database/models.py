@@ -1,4 +1,4 @@
-from sqlalchemy import BigInteger, String, Column, ForeignKey, Integer, DateTime
+from sqlalchemy import BigInteger, Boolean, String, Column, ForeignKey, Integer, DateTime
 from sqlalchemy.orm import DeclarativeBase, relationship
 from sqlalchemy.ext.asyncio import AsyncAttrs
 import datetime
@@ -13,7 +13,12 @@ class User(Base):
 
     id = Column(BigInteger, primary_key=True)  # Telegram ID
     username = Column(String, nullable=True)
+    photo_url = Column(String, nullable=True)
     favorite_voiceover = Column(String, default="AniLiberty")
+    quiet_hours_enabled = Column(Boolean, nullable=False, default=False)
+    quiet_hours_start = Column(String, nullable=False, default="23:00")
+    quiet_hours_end = Column(String, nullable=False, default="09:00")
+    quiet_timezone = Column(String, nullable=False, default="Europe/Moscow")
     registered_at = Column(DateTime, default=datetime.datetime.utcnow)
 
     subscriptions = relationship("Subscription", back_populates="user", cascade="all, delete-orphan")

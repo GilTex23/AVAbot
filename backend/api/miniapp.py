@@ -1,6 +1,7 @@
 import hashlib
 import hmac
 import json
+import re
 import time
 from urllib.parse import parse_qsl
 
@@ -12,6 +13,7 @@ from loader import bot
 from services import parser
 
 router = APIRouter(prefix="/api/miniapp", tags=["miniapp"])
+TIME_RE = re.compile(r"^([01]\d|2[0-3]):[0-5]\d$")
 
 
 def _validate_init_data(init_data: str) -> dict:
@@ -53,6 +55,14 @@ async def get_miniapp_user(request: Request) -> dict:
     raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Telegram initData is required")
 
 
+async def sync_miniapp_user(current_user: dict):
+    return await db.upsert_user_profile(
+        int(current_user["id"]),
+        current_user.get("username") or current_user.get("first_name"),
+        current_user.get("photo_url"),
+    )
+
+
 def _serialize_subscription(sub) -> dict:
     return {
         "id": sub.id,
@@ -67,19 +77,25 @@ def _serialize_subscription(sub) -> dict:
 @router.get("/me")
 async def get_me(current_user: dict = Depends(get_miniapp_user)):
     tg_id = int(current_user["id"])
-    user = await db.get_user(tg_id)
+    user = await sync_miniapp_user(current_user)
     subscriptions = await db.get_user_subscriptions(tg_id)
 
     return {
         "id": tg_id,
-        "username": current_user.get("username") or (user.username if user else None),
-        "favorite_voiceover": user.favorite_voiceover if user else None,
+        "username": user.username,
+        "photo_url": user.photo_url,
+        "favorite_voiceover": user.favorite_voiceover,
+        "quiet_hours_enabled": user.quiet_hours_enabled,
+        "quiet_hours_start": user.quiet_hours_start,
+        "quiet_hours_end": user.quiet_hours_end,
+        "quiet_timezone": user.quiet_timezone,
         "subscriptions_count": len(subscriptions),
     }
 
 
 @router.get("/updates")
 async def get_updates(voiceover: str | None = None, current_user: dict = Depends(get_miniapp_user)):
+    await sync_miniapp_user(current_user)
     tg_id = int(current_user["id"])
     selected_voiceover = voiceover
     if not selected_voiceover:
@@ -97,8 +113,32 @@ async def get_updates(voiceover: str | None = None, current_user: dict = Depends
 
 @router.get("/subscriptions")
 async def get_subscriptions(current_user: dict = Depends(get_miniapp_user)):
+    await sync_miniapp_user(current_user)
     subscriptions = await db.get_user_subscriptions(int(current_user["id"]))
     return {"items": [_serialize_subscription(sub) for sub in subscriptions]}
+
+
+@router.post("/subscriptions")
+async def add_subscription(payload: dict, current_user: dict = Depends(get_miniapp_user)):
+    await sync_miniapp_user(current_user)
+    title = (payload.get("title") or "").strip()
+    link = (payload.get("link") or "").strip()
+    episode = (payload.get("episode") or "Серия 0").strip()
+    voiceover = (payload.get("voiceover") or "").strip()
+    if not title or not link or not voiceover:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Title, link and voiceover are required")
+
+    info = await parser.get_anime_info(link, bot)
+    total_episodes = info.get("total_episodes") if info else None
+    created = await db.add_subscription(
+        int(current_user["id"]),
+        title,
+        link,
+        episode,
+        voiceover,
+        total_episodes,
+    )
+    return {"ok": True, "created": created}
 
 
 @router.delete("/subscriptions/{subscription_id}")
@@ -113,6 +153,7 @@ async def delete_subscription(subscription_id: int, current_user: dict = Depends
 
 @router.get("/schedule")
 async def get_schedule(current_user: dict = Depends(get_miniapp_user)):
+    await sync_miniapp_user(current_user)
     schedule = await parser.get_schedule(bot)
     if schedule is None:
         raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail="AnimeGO is temporarily unavailable")
@@ -121,9 +162,32 @@ async def get_schedule(current_user: dict = Depends(get_miniapp_user)):
 
 @router.put("/settings/voiceover")
 async def update_voiceover(payload: dict, current_user: dict = Depends(get_miniapp_user)):
+    await sync_miniapp_user(current_user)
     voiceover = (payload.get("voiceover") or "").strip()
     if not voiceover:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Voiceover is required")
 
     await db.update_user_voiceover(int(current_user["id"]), voiceover)
     return {"favorite_voiceover": voiceover}
+
+
+@router.put("/settings/quiet-hours")
+async def update_quiet_hours(payload: dict, current_user: dict = Depends(get_miniapp_user)):
+    await sync_miniapp_user(current_user)
+    enabled = bool(payload.get("enabled"))
+    start = (payload.get("start") or "23:00").strip()
+    end = (payload.get("end") or "09:00").strip()
+    timezone = (payload.get("timezone") or "Europe/Moscow").strip()
+
+    if not TIME_RE.match(start) or not TIME_RE.match(end):
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Time must be HH:MM")
+    if not timezone:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Timezone is required")
+
+    await db.update_user_quiet_hours(int(current_user["id"]), enabled, start, end, timezone)
+    return {
+        "quiet_hours_enabled": enabled,
+        "quiet_hours_start": start,
+        "quiet_hours_end": end,
+        "quiet_timezone": timezone,
+    }

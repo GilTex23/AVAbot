@@ -3,7 +3,12 @@ export type Voiceover = "AniLiberty" | "AniDUB" | "Dream Cast" | "SHIZA Project"
 export type UserProfile = {
   id: number;
   username?: string | null;
+  photo_url?: string | null;
   favorite_voiceover?: string | null;
+  quiet_hours_enabled: boolean;
+  quiet_hours_start: string;
+  quiet_hours_end: string;
+  quiet_timezone: string;
   subscriptions_count: number;
 };
 
@@ -37,3 +42,10 @@ export type ScheduleDay = {
 };
 
 export type TabId = "updates" | "subscriptions" | "schedule" | "settings";
+
+export type QuietHoursSettings = {
+  enabled: boolean;
+  start: string;
+  end: string;
+  timezone: string;
+};
