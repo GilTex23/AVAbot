@@ -1,5 +1,5 @@
 import { getTelegramInitData } from "../lib/telegram";
-import type { QuietHoursSettings, ScheduleDay, SubscriptionItem, UpdateItem, UserProfile } from "../lib/types";
+import type { AnimeDetails, QuietHoursSettings, ScheduleDay, ScheduleItem, SubscriptionItem, UpdateItem, UserProfile } from "../lib/types";
 
 const devTgId = import.meta.env.VITE_DEV_TG_ID as string | undefined;
 
@@ -48,6 +48,21 @@ export function addSubscription(item: UpdateItem) {
       link: item.link,
       episode: item.episode,
       voiceover: item.studio,
+      poster_url: item.poster_url,
+    }),
+  });
+}
+
+export function addScheduleSubscription(item: ScheduleItem, voiceover: string, totalEpisodes?: number | null) {
+  return fetchJson<{ ok: boolean; created: boolean }>("/api/miniapp/subscriptions", {
+    method: "POST",
+    body: JSON.stringify({
+      title: item.title,
+      link: item.link,
+      episode: "Серия 0",
+      voiceover,
+      total_episodes: totalEpisodes,
+      poster_url: item.poster_url,
     }),
   });
 }
@@ -58,6 +73,10 @@ export function deleteSubscription(id: number) {
 
 export function getSchedule(): Promise<{ days: ScheduleDay[] }> {
   return fetchJson("/api/miniapp/schedule");
+}
+
+export function getAnimeDetails(link: string): Promise<AnimeDetails> {
+  return fetchJson(`/api/miniapp/anime-details?link=${encodeURIComponent(link)}`);
 }
 
 export function saveVoiceover(voiceover: string) {

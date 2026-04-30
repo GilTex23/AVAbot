@@ -1,4 +1,4 @@
-import { Save, SlidersHorizontal } from "lucide-react";
+import { Check, Loader2, Save, SlidersHorizontal } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { Badge } from "../components/ui/badge";
 import { Button } from "../components/ui/button";
@@ -20,6 +20,9 @@ export function Settings({ user, onUserUpdated }: SettingsProps) {
   const [quietStart, setQuietStart] = useState(user?.quiet_hours_start || "23:00");
   const [quietEnd, setQuietEnd] = useState(user?.quiet_hours_end || "09:00");
   const [timezone, setTimezone] = useState(user?.quiet_timezone || "Europe/Moscow");
+  const [savingVoiceover, setSavingVoiceover] = useState(false);
+  const [savingQuiet, setSavingQuiet] = useState(false);
+  const [notice, setNotice] = useState<string | null>(null);
   const timeZones = useMemo(() => getTimeZones(), []);
 
   useEffect(() => {
@@ -31,28 +34,46 @@ export function Settings({ user, onUserUpdated }: SettingsProps) {
   }, [user]);
 
   async function saveFavoriteVoiceover() {
-    const result = await saveVoiceover(voiceover);
-    onUserUpdated(user ? { ...user, favorite_voiceover: result.favorite_voiceover } : null);
+    setSavingVoiceover(true);
+    setNotice(null);
+    try {
+      const result = await saveVoiceover(voiceover);
+      onUserUpdated(user ? { ...user, favorite_voiceover: result.favorite_voiceover } : null);
+      setNotice("Озвучка сохранена.");
+    } catch {
+      setNotice("Не удалось сохранить озвучку.");
+    } finally {
+      setSavingVoiceover(false);
+    }
   }
 
   async function saveQuietSettings() {
-    const result = await saveQuietHours({
-      enabled: quietMode,
-      start: quietStart,
-      end: quietEnd,
-      timezone,
-    });
-    onUserUpdated(
-      user
-        ? {
-            ...user,
-            quiet_hours_enabled: result.quiet_hours_enabled,
-            quiet_hours_start: result.quiet_hours_start,
-            quiet_hours_end: result.quiet_hours_end,
-            quiet_timezone: result.quiet_timezone,
-          }
-        : null,
-    );
+    setSavingQuiet(true);
+    setNotice(null);
+    try {
+      const result = await saveQuietHours({
+        enabled: quietMode,
+        start: quietStart,
+        end: quietEnd,
+        timezone,
+      });
+      onUserUpdated(
+        user
+          ? {
+              ...user,
+              quiet_hours_enabled: result.quiet_hours_enabled,
+              quiet_hours_start: result.quiet_hours_start,
+              quiet_hours_end: result.quiet_hours_end,
+              quiet_timezone: result.quiet_timezone,
+            }
+          : null,
+      );
+      setNotice("Тихие часы сохранены.");
+    } catch {
+      setNotice("Не удалось сохранить тихие часы.");
+    } finally {
+      setSavingQuiet(false);
+    }
   }
 
   return (
@@ -62,12 +83,14 @@ export function Settings({ user, onUserUpdated }: SettingsProps) {
         <p>Профиль Telegram, озвучка и тихие часы</p>
       </section>
 
+      {notice ? <div className="notice">{notice}</div> : null}
+
       <Card className="settings-card">
         <div className="settings-card__head">
           {user?.photo_url ? <img className="settings-card__avatar" src={user.photo_url} alt={user?.username || "Telegram user"} /> : <SlidersHorizontal size={22} />}
           <div>
             <h2>{user?.username ? `@${user.username}` : "Telegram профиль"}</h2>
-            <p>ID {user?.id || "не определен"}</p>
+            <p>ID {user?.id || "не определён"}</p>
           </div>
         </div>
         <Badge tone="green">{user?.subscriptions_count || 0} подписок</Badge>
@@ -82,9 +105,9 @@ export function Settings({ user, onUserUpdated }: SettingsProps) {
             </button>
           ))}
         </div>
-        <Button variant="primary" onClick={saveFavoriteVoiceover}>
-          <Save size={17} />
-          Сохранить озвучку
+        <Button variant="primary" disabled={savingVoiceover} onClick={saveFavoriteVoiceover}>
+          {savingVoiceover ? <Loader2 className="spin" size={17} /> : user?.favorite_voiceover === voiceover ? <Check size={17} /> : <Save size={17} />}
+          {savingVoiceover ? "Сохраняю" : "Сохранить озвучку"}
         </Button>
       </Card>
 
@@ -111,9 +134,9 @@ export function Settings({ user, onUserUpdated }: SettingsProps) {
           </select>
         </label>
         <p className="muted-copy">По умолчанию используется Europe/Moscow, то есть UTC+3.</p>
-        <Button variant="primary" onClick={saveQuietSettings}>
-          <Save size={17} />
-          Сохранить тихие часы
+        <Button variant="primary" disabled={savingQuiet} onClick={saveQuietSettings}>
+          {savingQuiet ? <Loader2 className="spin" size={17} /> : <Save size={17} />}
+          {savingQuiet ? "Сохраняю" : "Сохранить тихие часы"}
         </Button>
       </Card>
     </div>

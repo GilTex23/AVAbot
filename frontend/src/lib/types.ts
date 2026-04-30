@@ -24,6 +24,7 @@ export type SubscriptionItem = {
   id: number;
   title: string;
   link: string;
+  poster_url?: string | null;
   voiceover: string;
   last_episode?: string | null;
   total_episodes?: number | null;
@@ -34,6 +35,13 @@ export type ScheduleItem = {
   link: string;
   time: string;
   poster_url?: string;
+};
+
+export type AnimeDetails = {
+  type?: string | null;
+  status?: string | null;
+  total_episodes?: number | null;
+  voiceovers: string[];
 };
 
 export type ScheduleDay = {

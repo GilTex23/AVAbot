@@ -272,12 +272,20 @@ button {
 }
 
 .subscription-row {
-  justify-content: space-between;
+  display: grid;
+  grid-template-columns: 50px minmax(0, 1fr) auto;
+  justify-content: initial;
 }
 
 .subscription-row__main,
 .schedule-row__body {
   min-width: 0;
+}
+
+.subscription-row__poster {
+  width: 50px;
+  height: 70px;
+  border-radius: 6px;
 }
 
 .subscription-row__actions {
@@ -291,6 +299,12 @@ button {
   border-radius: 6px;
 }
 
+.schedule-row__actions {
+  display: flex;
+  flex-shrink: 0;
+  gap: 4px;
+}
+
 .settings-card {
   justify-content: space-between;
 }
@@ -298,6 +312,10 @@ button {
 .settings-card--column {
   align-items: stretch;
   flex-direction: column;
+}
+
+.settings-card--column .button {
+  width: 100%;
 }
 
 .settings-card__head {
@@ -330,6 +348,7 @@ button {
 .field-stack {
   display: grid;
   gap: 7px;
+  min-width: 0;
   color: var(--muted);
   font-size: 13px;
   font-weight: 750;
@@ -358,6 +377,16 @@ button {
 .button:disabled {
   cursor: progress;
   opacity: 0.68;
+}
+
+.spin {
+  animation: spin 0.8s linear infinite;
+}
+
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
 }
 
 .button--md {
@@ -475,6 +504,7 @@ button {
 
 .select {
   appearance: none;
+  min-width: 0;
 }
 
 .search-field {
@@ -566,6 +596,61 @@ button {
   color: var(--muted);
   text-align: center;
   font-size: 15px;
+}
+
+.notice {
+  border: 1px solid rgba(255, 92, 87, 0.34);
+  border-radius: var(--radius);
+  padding: 10px 12px;
+  background: rgba(255, 92, 87, 0.1);
+  color: var(--text);
+  font-size: 14px;
+  font-weight: 700;
+}
+
+.modal-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 60;
+  display: grid;
+  align-items: end;
+  padding: 16px;
+  background: rgba(0, 0, 0, 0.58);
+}
+
+.modal-card {
+  display: grid;
+  gap: 16px;
+  width: min(100%, 560px);
+  margin: 0 auto calc(76px + var(--safe-bottom));
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 16px;
+  background: #202121;
+}
+
+.modal-card__head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.modal-card h2 {
+  margin: 0;
+  font-size: 19px;
+  line-height: 1.2;
+}
+
+.modal-card p {
+  margin: 5px 0 0;
+  color: var(--muted);
+  font-size: 14px;
+}
+
+.voiceover-list {
+  display: grid;
+  gap: 8px;
 }
 
 .gate {
@@ -672,5 +757,26 @@ button {
   .anime-row__poster {
     width: 104px;
     height: 146px;
+  }
+}
+
+@media (max-width: 520px) {
+  .settings-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .subscription-row {
+    grid-template-columns: 46px minmax(0, 1fr) auto;
+    gap: 10px;
+  }
+
+  .subscription-row__poster {
+    width: 46px;
+    height: 64px;
+  }
+
+  .subscription-row__actions,
+  .schedule-row__actions {
+    flex-direction: column;
   }
 }

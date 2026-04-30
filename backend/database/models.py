@@ -31,6 +31,7 @@ class Subscription(Base):
     user_id = Column(BigInteger, ForeignKey('users.id'))
     anime_url = Column(String, nullable=False)
     anime_title = Column(String, nullable=False)
+    poster_url = Column(String, nullable=True)
     voiceover = Column(String, nullable=False, default="Unknown")
 
     total_episodes = Column(Integer, nullable=True)

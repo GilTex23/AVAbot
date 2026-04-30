@@ -13,6 +13,7 @@ export default function App() {
   const [activeTab, setActiveTab] = useState<TabId>(() => (localStorage.getItem("miniapp-active-tab") as TabId) || "updates");
   const [user, setUser] = useState<UserProfile | null>(null);
   const [refreshKey, setRefreshKey] = useState(0);
+  const [refreshing, setRefreshing] = useState(false);
 
   useEffect(() => {
     bootTelegramShell();
@@ -26,12 +27,17 @@ export default function App() {
     localStorage.setItem("miniapp-active-tab", tab);
   }
 
-  function refresh() {
+  async function refresh() {
     if (!isTelegramMiniApp()) {
       return;
     }
     setRefreshKey((key) => key + 1);
-    getProfile().then(setUser);
+    setRefreshing(true);
+    try {
+      setUser(await getProfile());
+    } finally {
+      setRefreshing(false);
+    }
   }
 
   if (!isTelegramMiniApp()) {
@@ -39,7 +45,7 @@ export default function App() {
   }
 
   return (
-    <AppLayout activeTab={activeTab} user={user} onTabChange={changeTab} onRefresh={refresh}>
+    <AppLayout activeTab={activeTab} user={user} refreshing={refreshing} onTabChange={changeTab} onRefresh={refresh}>
       {activeTab === "updates" ? <Updates favoriteVoiceover={user?.favorite_voiceover || "AniLiberty"} refreshKey={refreshKey} /> : null}
       {activeTab === "subscriptions" ? <Subscriptions refreshKey={refreshKey} /> : null}
       {activeTab === "schedule" ? <Schedule refreshKey={refreshKey} /> : null}

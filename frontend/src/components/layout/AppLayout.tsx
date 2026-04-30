@@ -8,14 +8,15 @@ type AppLayoutProps = {
   activeTab: TabId;
   user?: UserProfile | null;
   children: ReactNode;
+  refreshing?: boolean;
   onTabChange: (tab: TabId) => void;
   onRefresh: () => void;
 };
 
-export function AppLayout({ activeTab, user, children, onTabChange, onRefresh }: AppLayoutProps) {
+export function AppLayout({ activeTab, user, children, refreshing = false, onTabChange, onRefresh }: AppLayoutProps) {
   return (
     <div className="app-shell">
-      <Header user={user} onRefresh={onRefresh} />
+      <Header user={user} refreshing={refreshing} onRefresh={onRefresh} />
       <main className="app-main">{children}</main>
       <CookieBanner />
       <BottomNav activeTab={activeTab} onTabChange={onTabChange} />

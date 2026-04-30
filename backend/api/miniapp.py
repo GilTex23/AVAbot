@@ -72,6 +72,7 @@ def _serialize_subscription(sub) -> dict:
         "id": sub.id,
         "title": sub.anime_title,
         "link": sub.anime_url,
+        "poster_url": sub.poster_url,
         "voiceover": sub.voiceover,
         "last_episode": sub.last_episode,
         "total_episodes": sub.total_episodes,
@@ -129,11 +130,13 @@ async def add_subscription(payload: dict, current_user: dict = Depends(get_minia
     link = (payload.get("link") or "").strip()
     episode = (payload.get("episode") or "Серия 0").strip()
     voiceover = (payload.get("voiceover") or "").strip()
+    poster_url = (payload.get("poster_url") or "").strip() or None
     if not title or not link or not voiceover:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Title, link and voiceover are required")
 
-    info = await parser.get_anime_info(link, bot)
-    total_episodes = info.get("total_episodes") if info else None
+    payload_total = payload.get("total_episodes")
+    info = await parser.get_anime_info(link, bot) if payload_total is None else None
+    total_episodes = payload_total if payload_total is not None else (info.get("total_episodes") if info else None)
     created = await db.add_subscription(
         int(current_user["id"]),
         title,
@@ -141,8 +144,24 @@ async def add_subscription(payload: dict, current_user: dict = Depends(get_minia
         episode,
         voiceover,
         total_episodes,
+        poster_url,
     )
     return {"ok": True, "created": created}
+
+
+@router.get("/anime-details")
+async def get_anime_details(link: str, current_user: dict = Depends(get_miniapp_user)):
+    await sync_miniapp_user(current_user)
+    info = await parser.get_anime_details(link, bot)
+    if not info:
+        raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail="Anime details are temporarily unavailable")
+
+    return {
+        "type": info.get("type"),
+        "status": info.get("status"),
+        "total_episodes": info.get("total_episodes"),
+        "voiceovers": info.get("available_voiceovers") or [],
+    }
 
 
 @router.delete("/subscriptions/{subscription_id}")

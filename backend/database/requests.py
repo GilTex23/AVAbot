@@ -86,7 +86,15 @@ async def get_user_voiceover(tg_id: int):
 
 
 # --- SUBSCRIPTIONS ---
-async def add_subscription(tg_id: int, title: str, url: str, last_ep: str, voiceover: str, total_eps: int = None):
+async def add_subscription(
+    tg_id: int,
+    title: str,
+    url: str,
+    last_ep: str,
+    voiceover: str,
+    total_eps: int = None,
+    poster_url: str | None = None,
+):
     """Добавляет подписку с конкретной озвучкой"""
     async with async_session() as session:
         clean_url = url.split('#')[0].rstrip('/')
@@ -107,6 +115,7 @@ async def add_subscription(tg_id: int, title: str, url: str, last_ep: str, voice
             user_id=tg_id,
             anime_title=title,
             anime_url=clean_url,
+            poster_url=poster_url,
             last_episode=last_ep,
             voiceover=voiceover,
             total_episodes=total_eps

@@ -1,4 +1,4 @@
-import { ExternalLink, Plus, Radio, Star } from "lucide-react";
+import { Check, ExternalLink, Loader2, Plus, Radio, Star } from "lucide-react";
 import { useEffect, useState } from "react";
 import { Badge } from "../components/ui/badge";
 import { Button } from "../components/ui/button";
@@ -18,25 +18,44 @@ export function Updates({ favoriteVoiceover, refreshKey }: UpdatesProps) {
   const [items, setItems] = useState<UpdateItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [pendingLink, setPendingLink] = useState<string | null>(null);
+  const [subscribedKeys, setSubscribedKeys] = useState<Set<string>>(() => new Set());
+  const [notice, setNotice] = useState<string | null>(null);
 
   useEffect(() => {
     let cancelled = false;
     setLoading(true);
-    getUpdates(selectedVoiceover).then((data) => {
-      if (!cancelled) {
-        setItems(data.items);
-        setLoading(false);
-      }
-    });
+    setNotice(null);
+    getUpdates(selectedVoiceover)
+      .then((data) => {
+        if (!cancelled) {
+          setItems(data.items);
+        }
+      })
+      .catch(() => {
+        if (!cancelled) {
+          setNotice("Не удалось загрузить обновления. Попробуйте обновить страницу.");
+        }
+      })
+      .finally(() => {
+        if (!cancelled) {
+          setLoading(false);
+        }
+      });
     return () => {
       cancelled = true;
     };
   }, [selectedVoiceover, refreshKey]);
 
   async function subscribe(item: UpdateItem) {
-    setPendingLink(item.link);
+    const key = `${item.link}-${item.studio}`;
+    setPendingLink(key);
+    setNotice(null);
     try {
-      await addSubscription(item);
+      const result = await addSubscription(item);
+      setSubscribedKeys((current) => new Set(current).add(key));
+      setNotice(result.created ? "Подписка добавлена." : "Такая подписка уже есть.");
+    } catch {
+      setNotice("Не удалось оформить подписку. Попробуйте ещё раз.");
     } finally {
       setPendingLink(null);
     }
@@ -52,6 +71,8 @@ export function Updates({ favoriteVoiceover, refreshKey }: UpdatesProps) {
         <Badge tone="red">{selectedVoiceover}</Badge>
       </section>
 
+      {notice ? <div className="notice">{notice}</div> : null}
+
       <div className="chip-row" aria-label="Фильтр озвучки">
         {voiceovers.map((voiceover) => (
           <button key={voiceover} className={voiceover === selectedVoiceover ? "chip chip--active" : "chip"} type="button" onClick={() => setSelectedVoiceover(voiceover)}>
@@ -62,31 +83,39 @@ export function Updates({ favoriteVoiceover, refreshKey }: UpdatesProps) {
 
       <div className="update-list">
         {loading ? (
-          <Card className="empty-state">Загружаю обновления...</Card>
+          <Card className="empty-state">
+            <Loader2 className="spin" size={24} />
+            Загружаю обновления...
+          </Card>
         ) : (
-          items.map((item) => (
-            <Card key={`${item.link}-${item.episode}-${item.studio}`} className="anime-row">
-              <LazyImage className="anime-row__poster" src={item.poster_url} alt={item.title} />
-              <div className="anime-row__body">
-                <div className="anime-row__meta">
-                  <Badge tone="green">{item.episode}</Badge>
-                  <span>{item.studio}</span>
+          items.map((item) => {
+            const key = `${item.link}-${item.studio}`;
+            const isPending = pendingLink === key;
+            const isSubscribed = subscribedKeys.has(key);
+            return (
+              <Card key={`${item.link}-${item.episode}-${item.studio}`} className="anime-row">
+                <LazyImage className="anime-row__poster" src={item.poster_url} alt={item.title} />
+                <div className="anime-row__body">
+                  <div className="anime-row__meta">
+                    <Badge tone="green">{item.episode}</Badge>
+                    <span>{item.studio}</span>
+                  </div>
+                  <h2>{item.title}</h2>
+                  <div className="anime-row__actions">
+                    <Button size="sm" variant={isSubscribed ? "secondary" : "primary"} disabled={isPending || isSubscribed} onClick={() => subscribe(item)}>
+                      {isPending ? <Loader2 className="spin" size={16} /> : isSubscribed ? <Check size={16} /> : <Plus size={16} />}
+                      {isPending ? "Добавляю" : isSubscribed ? "Добавлено" : "Подписаться"}
+                    </Button>
+                    <Button size="sm" variant="ghost" onClick={() => openAnime(item.link)}>
+                      <ExternalLink size={16} />
+                      Открыть
+                    </Button>
+                  </div>
                 </div>
-                <h2>{item.title}</h2>
-                <div className="anime-row__actions">
-                  <Button size="sm" variant="primary" disabled={pendingLink === item.link} onClick={() => subscribe(item)}>
-                    <Plus size={16} />
-                    {pendingLink === item.link ? "Добавляю" : "Подписаться"}
-                  </Button>
-                  <Button size="sm" variant="ghost" onClick={() => openAnime(item.link)}>
-                    <ExternalLink size={16} />
-                    Открыть
-                  </Button>
-                </div>
-              </div>
-              <Star className="anime-row__watermark" size={42} />
-            </Card>
-          ))
+                <Star className="anime-row__watermark" size={42} />
+              </Card>
+            );
+          })
         )}
       </div>
 
