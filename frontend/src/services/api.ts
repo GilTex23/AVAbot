@@ -16,7 +16,7 @@ async function fetchJson<T>(path: string, options?: RequestInit): Promise<T> {
     ...options,
     headers: {
       "Content-Type": "application/json",
-      ...(initData ? { "x-telegram-init-data": initData } : {}),
+      ...(initData ? { "X-Telegram-Init-Data": initData } : {}),
       ...options?.headers,
     },
   });

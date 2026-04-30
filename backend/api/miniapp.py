@@ -41,7 +41,11 @@ def _validate_init_data(init_data: str) -> dict:
 
 
 async def get_miniapp_user(request: Request) -> dict:
-    init_data = request.headers.get("x-telegram-init-data") or request.query_params.get("initData")
+    init_data = (
+        request.headers.get("x-telegram-init-data")
+        or request.query_params.get("initData")
+        or request.query_params.get("tgWebAppData")
+    )
     if init_data:
         return _validate_init_data(init_data)
 
