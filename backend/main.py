@@ -1,16 +1,27 @@
 import logging
+import sys
 from contextlib import asynccontextmanager
+from pathlib import Path
 from fastapi import FastAPI, Request
-from fastapi.responses import PlainTextResponse
+from fastapi.responses import FileResponse, PlainTextResponse
+from fastapi.staticfiles import StaticFiles
 from uvicorn.middleware.proxy_headers import ProxyHeadersMiddleware
 from aiogram import types
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from datetime import datetime
 
+BACKEND_DIR = Path(__file__).resolve().parent
+ROOT_DIR = BACKEND_DIR.parent
+FRONTEND_DIST_DIR = ROOT_DIR / "frontend" / "dist"
+
+if str(BACKEND_DIR) not in sys.path:
+    sys.path.insert(0, str(BACKEND_DIR))
+
 from sqladmin import Admin
 
 import config
 from loader import bot, dp
+from api.miniapp import router as miniapp_router
 from handlers import user, admin, other
 from middlewares.callback import CallbackAnswerMiddleware
 from services.logger import setup_logger
@@ -71,6 +82,28 @@ async def lifespan(app: FastAPI):
 app = FastAPI(lifespan=lifespan)
 
 app.add_middleware(ProxyHeadersMiddleware, trusted_hosts="*")
+app.include_router(miniapp_router)
+
+if FRONTEND_DIST_DIR.exists():
+    assets_dir = FRONTEND_DIST_DIR / "assets"
+    if assets_dir.exists():
+        app.mount("/miniapp/assets", StaticFiles(directory=assets_dir), name="miniapp-assets")
+
+
+@app.get("/miniapp", include_in_schema=False)
+async def miniapp_index():
+    index_path = FRONTEND_DIST_DIR / "index.html"
+    if index_path.exists():
+        return FileResponse(index_path)
+    return PlainTextResponse("Mini App frontend is not built yet.", status_code=404)
+
+
+@app.get("/miniapp/{path:path}", include_in_schema=False)
+async def miniapp_spa(path: str):
+    index_path = FRONTEND_DIST_DIR / "index.html"
+    if index_path.exists():
+        return FileResponse(index_path)
+    return PlainTextResponse("Mini App frontend is not built yet.", status_code=404)
 
 admin_panel = Admin(app, engine, authentication_backend=authentication_backend, title="AnimeBot Admin")
 admin_panel.add_view(UserAdmin)

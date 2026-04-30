@@ -2,7 +2,7 @@ name: Deploy Bot
 
 on:
   push:
-    branches: [ "main" ]
+    branches: [ "main", "telegram-miniapp" ]
 
 jobs:
   deploy:
@@ -19,12 +19,14 @@ jobs:
             cd /home/${{ secrets.USERNAME }}
 
             if [ ! -d "AVAbot" ]; then
-              git clone https://github.com/GilTex23/AVAbot.git AVAbot
+              git clone --branch ${{ github.ref_name }} https://github.com/GilTex23/AVAbot.git AVAbot
             fi
 
             cd AVAbot
             
-            git pull origin main
+            git fetch origin ${{ github.ref_name }}
+            git checkout -B ${{ github.ref_name }} origin/${{ github.ref_name }}
+            git pull --ff-only origin ${{ github.ref_name }}
             
             docker compose up -d --build
             

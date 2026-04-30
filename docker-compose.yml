@@ -1,9 +1,10 @@
 services:
   bot:
-    build: .
+    build:
+      context: .
+      dockerfile: backend/Dockerfile
     container_name: anime_bot
     restart: always
-    # Docker сам возьмет переменные из .env файла на сервере
     env_file:
       - .env
     ports:
@@ -13,11 +14,21 @@ services:
     volumes:
       - ./logs:/app/logs
 
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    container_name: anime_frontend
+    restart: always
+    ports:
+      - "8002:80"
+    depends_on:
+      - bot
+
   db:
     image: postgres:15-alpine
     container_name: anime_db
     restart: always
-    # Передаем переменные для инициализации Postgres
     environment:
       POSTGRES_USER: ${POSTGRES_USER}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}

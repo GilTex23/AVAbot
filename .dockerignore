@@ -6,3 +6,6 @@ __pycache__
 logs/*
 .idea
 .vscode
+.vs
+frontend/node_modules
+frontend/dist

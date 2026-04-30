@@ -4,6 +4,7 @@ from bs4 import BeautifulSoup as bs
 import logging
 import urllib.parse
 import asyncio
+import time
 from random import choice
 import config
 from aiogram import Bot
@@ -33,6 +34,29 @@ logger = logging.getLogger(__name__)
 
 antispam = AntiSpamNotify(logger)
 
+_HTML_CACHE = {}
+
+
+def _get_cached_html(url: str):
+    cached = _HTML_CACHE.get(url)
+    if not cached:
+        return None
+
+    expires_at, html_text = cached
+    if expires_at <= time.monotonic():
+        _HTML_CACHE.pop(url, None)
+        return None
+
+    return html_text
+
+
+def _set_cached_html(url: str, html_text: str):
+    ttl = getattr(config, "ANIMEGO_CACHE_TTL_SECONDS", 300)
+    if ttl <= 0 or not html_text:
+        return
+
+    _HTML_CACHE[url] = (time.monotonic() + ttl, html_text)
+
 
 def clean_link(link: str) -> str:
     if not link: return link
@@ -41,7 +65,17 @@ def clean_link(link: str) -> str:
     return link.split('#')[0].rstrip('/')
 
 
-async def get_html(url: str, session: aiohttp.ClientSession = None, bot: Bot=None):
+def clean_asset_url(url: str) -> str:
+    if not url:
+        return ""
+    if url.startswith("//"):
+        return "https:" + url
+    if url.startswith("/"):
+        return "https://animego.me" + url
+    return url
+
+
+async def get_html_scraperapi_legacy(url: str, session: aiohttp.ClientSession = None, bot: Bot=None):
     """
     Получает HTML через ScraperAPI
     """
@@ -132,6 +166,125 @@ async def get_html(url: str, session: aiohttp.ClientSession = None, bot: Bot=Non
                 await session.close()
 
 
+async def get_html(url: str, session: aiohttp.ClientSession = None, bot: Bot=None):
+    cached_html = _get_cached_html(url)
+    if cached_html:
+        logger.debug(f"HTML cache hit for {url}")
+        return cached_html
+
+    close_session = False
+
+    if session is None:
+        session = aiohttp.ClientSession()
+        close_session = True
+
+    try:
+        if getattr(config, "ANIMEGO_DIRECT_ENABLED", True):
+            try:
+                direct_timeout = aiohttp.ClientTimeout(
+                    total=getattr(config, "ANIMEGO_DIRECT_TIMEOUT_SECONDS", 5)
+                )
+                async with session.get(url, headers=HEADERS, timeout=direct_timeout) as response:
+                    logger.info(f"Direct request to {url} - Status: {response.status}")
+                    if response.status == 200:
+                        html_text = await response.text()
+                        _set_cached_html(url, html_text)
+                        return html_text
+
+                    if response.status not in (403, 429, 500, 502, 503, 504):
+                        error_text = await response.text()
+                        logger.warning(
+                            f"Direct request to {url} returned {response.status}. "
+                            f"Response text: {error_text[:300]}"
+                        )
+            except asyncio.TimeoutError:
+                logger.warning(f"Direct request timeout for {url}; trying ScraperAPI")
+            except Exception as e:
+                logger.warning(f"Direct request error for {url}: {e}; trying ScraperAPI")
+
+        api_keys = config.SCRAPER_API_KEYS.copy()
+        attempt = 1
+        check_attempt = lambda x_: True if x_ <= 7 else False
+        while True:
+            try:
+                if api_keys:
+                    api_key = choice(api_keys)
+                else:
+                    antispam.failed_requests += 1
+                    logger.critical(f"All your API keys are exhausted or invalid!\nPlease check logs and your API keys.\nFailed requests until restart: {antispam.failed_requests}")
+                    if not antispam.is_notified():
+                        await notify_admins(
+                            bot,
+                            "Все API ключи ScraperAPI исчерпаны или недействительны!\n\n"
+                            "Парсинг аниме временно недоступен.\n"
+                            "Необходимо добавить новые ключи в конфигурацию.",
+                            level="CRITICAL"
+                        )
+                        antispam.set_notify_timestamp()
+                    return None
+                params = {
+                    'api_key': api_key[1],
+                    'url': url.strip(),
+                    'device_type': 'desktop',
+                    'country_code': 'ru'
+                }
+                async with session.get(SCRAPER_API_URL, params=params, timeout=aiohttp.ClientTimeout(total=30)) as response:
+                    logger.info(f"ScraperAPI request to {url} - Status: {response.status} - Used API name: {api_key[0]}")
+                    if response.status == 200:
+                        html_text = await response.text()
+                        _set_cached_html(url, html_text)
+                        return html_text
+                    elif response.status in [500, 404, 429, 400, 403, 401]:
+                        if check_attempt(attempt):
+                            if response.status == 500:
+                                logger.error(f"Request failed. It's worth checking the URL - Attempt {attempt}")
+                                attempt += 1
+                                await asyncio.sleep(1)
+                            elif response.status == 404:
+                                logger.error(f"Bad Gateway - The requested page does not exist - Attempt {attempt}")
+                                attempt += 5
+                                await asyncio.sleep(0.3)
+                            elif response.status == 429:
+                                logger.error(f"To many concurrent requests - Attempt {attempt}")
+                                attempt += 1
+                                await asyncio.sleep(0.3)
+                            elif response.status == 400:
+                                logger.error(f"Error, invalid request. Make sure that your URL is entered correctly - Attempt {attempt}")
+                                attempt += 5
+                                await asyncio.sleep(0.5)
+                            elif response.status == 403:
+                                logger.error(f"API limit exceeded - API Name: {api_key[0]}")
+                                api_keys.remove(api_key)
+                                attempt += 1
+                                await asyncio.sleep(0.1)
+                            elif response.status == 401:
+                                logger.error(f"An unauthorized request. Please make sure that your API key \"{api_key[0]}\" is valid.")
+                                api_keys.remove(api_key)
+                                await asyncio.sleep(0.1)
+                            continue
+                        else:
+                            logger.critical("Too many attempts.")
+                    else:
+                        try:
+                            error_text = await response.text()
+
+                            logger.error(f"Response headers: {dict(response.headers)}")
+                            logger.error(f"Response text: {error_text[:900]}")
+                        except Exception as e:
+                            logger.error(f"Failed to get error text: {e}")
+                    return None
+
+            except asyncio.TimeoutError:
+                logger.error(f"Timeout error for {url}")
+                return None
+            except Exception as e:
+                logger.error(f"Network error for {url}: {e}")
+                return None
+    finally:
+        if close_session:
+            await session.close()
+
+
 async def get_updates(bot: Bot):
     """
     Парсит главную страницу и возвращает список свежих серий.
@@ -161,6 +314,8 @@ async def get_updates(bot: Bot):
 
                     title_tag = item.find(class_='aw-name')
                     title = title_tag.get_text(strip=True) if title_tag else "Unknown"
+                    image_tag = item.find('img')
+                    poster_url = clean_asset_url(image_tag.get('src')) if image_tag else ""
 
                     parts = meta_text.split('·')
                     episode_num = parts[0].strip()
@@ -176,7 +331,8 @@ async def get_updates(bot: Bot):
                         'title': title,
                         'episode': episode_num,
                         'studio': studio,
-                        'link': link
+                        'link': link,
+                        'poster_url': poster_url
                     })
 
             except Exception as e:
@@ -289,6 +445,8 @@ async def get_schedule(bot: Bot):
                     link = clean_link(raw_link)
 
                     title = anime.find(class_='aw-name').get_text(strip=True)
+                    image_tag = anime.find('img')
+                    poster_url = clean_asset_url(image_tag.get('src')) if image_tag else ""
 
                     time_tag = anime.find(class_='aw-meta__episode-time')
                     time_str = time_tag.get_text(strip=True) if time_tag else ""
@@ -296,7 +454,8 @@ async def get_schedule(bot: Bot):
                     items.append({
                         'title': title,
                         'link': link,
-                        'time': time_str
+                        'time': time_str,
+                        'poster_url': poster_url
                     })
 
                 if items:
