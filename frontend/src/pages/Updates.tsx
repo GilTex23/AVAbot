@@ -1,11 +1,12 @@
 import { Check, ExternalLink, Loader2, Plus, Radio, Star } from "lucide-react";
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Badge } from "../components/ui/badge";
 import { Button } from "../components/ui/button";
 import { Card } from "../components/ui/card";
 import { LazyImage } from "../components/ui/LazyImage";
-import { addSubscription, getUpdates } from "../services/api";
-import type { UpdateItem } from "../lib/types";
+import { addSubscription, getSubscriptions, getUpdates } from "../services/api";
+import type { SubscriptionItem, UpdateItem } from "../lib/types";
+import { buildSubscriptionIndex, subscriptionKey } from "../lib/subscriptions";
 import { hapticNotification } from "../lib/telegram";
 import { openAnime, voiceovers } from "../lib/utils";
 
@@ -17,19 +18,21 @@ type UpdatesProps = {
 export function Updates({ favoriteVoiceover, refreshKey }: UpdatesProps) {
   const [selectedVoiceover, setSelectedVoiceover] = useState(favoriteVoiceover || "AniLiberty");
   const [items, setItems] = useState<UpdateItem[]>([]);
+  const [subscriptions, setSubscriptions] = useState<SubscriptionItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [pendingLink, setPendingLink] = useState<string | null>(null);
-  const [subscribedKeys, setSubscribedKeys] = useState<Set<string>>(() => new Set());
   const [notice, setNotice] = useState<string | null>(null);
+  const subscriptionIndex = useMemo(() => buildSubscriptionIndex(subscriptions), [subscriptions]);
 
   useEffect(() => {
     let cancelled = false;
     setLoading(true);
     setNotice(null);
-    getUpdates(selectedVoiceover)
-      .then((data) => {
+    Promise.all([getUpdates(selectedVoiceover), getSubscriptions()])
+      .then(([updatesData, subscriptionsData]) => {
         if (!cancelled) {
-          setItems(data.items);
+          setItems(updatesData.items);
+          setSubscriptions(subscriptionsData.items);
         }
       })
       .catch(() => {
@@ -48,12 +51,26 @@ export function Updates({ favoriteVoiceover, refreshKey }: UpdatesProps) {
   }, [selectedVoiceover, refreshKey]);
 
   async function subscribe(item: UpdateItem) {
-    const key = `${item.link}-${item.studio}`;
+    const key = subscriptionKey(item.link, item.studio);
     setPendingLink(key);
     setNotice(null);
     try {
       const result = await addSubscription(item);
-      setSubscribedKeys((current) => new Set(current).add(key));
+      if (result.created) {
+        const tempId = Number(`${Date.now()}${Math.floor(Math.random() * 1000)}`);
+        setSubscriptions((current) => [
+          ...current,
+          {
+            id: tempId,
+            title: item.title,
+            link: item.link,
+            poster_url: item.poster_url,
+            voiceover: item.studio,
+            last_episode: item.episode,
+            total_episodes: null,
+          },
+        ]);
+      }
       hapticNotification(result.created ? "success" : "warning");
       setNotice(result.created ? "Подписка добавлена." : "Такая подписка уже есть.");
     } catch {
@@ -92,16 +109,17 @@ export function Updates({ favoriteVoiceover, refreshKey }: UpdatesProps) {
           </Card>
         ) : (
           items.map((item) => {
-            const key = `${item.link}-${item.studio}`;
+            const key = subscriptionKey(item.link, item.studio);
             const isPending = pendingLink === key;
-            const isSubscribed = subscribedKeys.has(key);
+            const isSubscribed = subscriptionIndex.byAnimeVoiceover.has(key);
             return (
               <Card key={`${item.link}-${item.episode}-${item.studio}`} className="anime-row">
                 <LazyImage className="anime-row__poster" src={item.poster_url} alt={item.title} />
                 <div className="anime-row__body">
                   <div className="anime-row__meta">
                     <Badge tone="green">{item.episode}</Badge>
-                    <span>{item.studio}</span>
+                    <span className="studio-pill">{item.studio}</span>
+                    {isSubscribed ? <span className="subscribed-mark">В подписках</span> : null}
                   </div>
                   <h2>{item.title}</h2>
                   <div className="anime-row__actions">

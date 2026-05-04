@@ -221,12 +221,38 @@ button {
 .anime-row__meta,
 .subscription-row__meta {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
   gap: 8px;
   min-width: 0;
   color: var(--soft);
   font-size: 13px;
   font-weight: 650;
+}
+
+.studio-pill {
+  display: inline-flex;
+  align-items: center;
+  min-height: 24px;
+  border: 1px solid rgba(255, 92, 87, 0.48);
+  border-radius: 5px;
+  padding: 0 8px;
+  background: rgba(255, 92, 87, 0.12);
+  color: var(--text);
+  font-size: 12px;
+  font-weight: 850;
+}
+
+.subscribed-mark {
+  display: inline-flex;
+  align-items: center;
+  min-height: 24px;
+  border-radius: 5px;
+  padding: 0 8px;
+  background: rgba(37, 201, 74, 0.12);
+  color: #7df09a;
+  font-size: 12px;
+  font-weight: 800;
 }
 
 .anime-row h2,
@@ -271,6 +297,12 @@ button {
   padding: 10px;
 }
 
+.schedule-row {
+  display: grid;
+  grid-template-columns: 48px minmax(0, 1fr) 42px;
+  align-items: start;
+}
+
 .subscription-row {
   display: grid;
   grid-template-columns: 50px minmax(0, 1fr) auto;
@@ -300,9 +332,36 @@ button {
 }
 
 .schedule-row__actions {
+  display: grid;
+  width: 42px;
+  justify-items: center;
+  gap: 8px;
+}
+
+.schedule-row h2 {
+  display: -webkit-box;
+  overflow: hidden;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+}
+
+.subscription-chips {
   display: flex;
-  flex-shrink: 0;
-  gap: 4px;
+  flex-wrap: wrap;
+  gap: 5px;
+  margin-top: 8px;
+}
+
+.subscription-chips span {
+  display: inline-flex;
+  align-items: center;
+  min-height: 22px;
+  border-radius: 5px;
+  padding: 0 7px;
+  background: rgba(37, 201, 74, 0.12);
+  color: #8af1a4;
+  font-size: 11px;
+  font-weight: 800;
 }
 
 .settings-card {
@@ -653,6 +712,18 @@ button {
   gap: 8px;
 }
 
+.voiceover-option {
+  justify-content: flex-start;
+  min-height: 44px;
+}
+
+.voiceover-option small {
+  margin-left: auto;
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 800;
+}
+
 .gate {
   display: grid;
   min-height: 100vh;
@@ -777,6 +848,6 @@ button {
 
   .subscription-row__actions,
   .schedule-row__actions {
-    flex-direction: column;
+    grid-auto-flow: row;
   }
 }

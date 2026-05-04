@@ -5,8 +5,9 @@ import { Button } from "../components/ui/button";
 import { Card } from "../components/ui/card";
 import { Input } from "../components/ui/input";
 import { LazyImage } from "../components/ui/LazyImage";
-import { addScheduleSubscription, getAnimeDetails, getSchedule } from "../services/api";
-import type { AnimeDetails, ScheduleDay, ScheduleItem } from "../lib/types";
+import { addScheduleSubscription, getAnimeDetails, getSchedule, getSubscriptions } from "../services/api";
+import type { AnimeDetails, ScheduleDay, ScheduleItem, SubscriptionItem } from "../lib/types";
+import { buildSubscriptionIndex, normalizeAnimeLink, subscriptionKey } from "../lib/subscriptions";
 import { hapticNotification } from "../lib/telegram";
 import { openAnime } from "../lib/utils";
 
@@ -21,22 +22,24 @@ type VoiceoverModal = {
 
 export function Schedule({ refreshKey }: ScheduleProps) {
   const [days, setDays] = useState<ScheduleDay[]>([]);
+  const [subscriptions, setSubscriptions] = useState<SubscriptionItem[]>([]);
   const [query, setQuery] = useState("");
   const [loading, setLoading] = useState(true);
   const [pendingLink, setPendingLink] = useState<string | null>(null);
   const [pendingVoiceover, setPendingVoiceover] = useState<string | null>(null);
-  const [subscribedKeys, setSubscribedKeys] = useState<Set<string>>(() => new Set());
   const [modal, setModal] = useState<VoiceoverModal | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
+  const subscriptionIndex = useMemo(() => buildSubscriptionIndex(subscriptions), [subscriptions]);
 
   useEffect(() => {
     let cancelled = false;
     setLoading(true);
     setNotice(null);
-    getSchedule()
-      .then((data) => {
+    Promise.all([getSchedule(), getSubscriptions()])
+      .then(([scheduleData, subscriptionsData]) => {
         if (!cancelled) {
-          setDays(data.days);
+          setDays(scheduleData.days);
+          setSubscriptions(subscriptionsData.items);
         }
       })
       .catch(() => {
@@ -100,12 +103,25 @@ export function Schedule({ refreshKey }: ScheduleProps) {
     if (!modal) {
       return;
     }
-    const key = `${modal.item.link}-${voiceover}`;
     setPendingVoiceover(voiceover);
     setNotice(null);
     try {
       const result = await addScheduleSubscription(modal.item, voiceover, modal.details.total_episodes);
-      setSubscribedKeys((current) => new Set(current).add(key));
+      if (result.created) {
+        const tempId = Number(`${Date.now()}${Math.floor(Math.random() * 1000)}`);
+        setSubscriptions((current) => [
+          ...current,
+          {
+            id: tempId,
+            title: modal.item.title,
+            link: modal.item.link,
+            poster_url: modal.item.poster_url,
+            voiceover,
+            last_episode: "Серия 0",
+            total_episodes: modal.details.total_episodes,
+          },
+        ]);
+      }
       hapticNotification(result.created ? "success" : "warning");
       setNotice(result.created ? "Подписка добавлена." : "Такая подписка уже есть.");
       setModal(null);
@@ -148,8 +164,10 @@ export function Schedule({ refreshKey }: ScheduleProps) {
               </div>
               <div className="compact-list">
                 {day.items.map((item) => {
+                  const animeSubscriptions = subscriptionIndex.byAnime.get(normalizeAnimeLink(item.link)) || [];
+                  const subscribedVoiceovers = animeSubscriptions.map((subscription) => subscription.voiceover);
                   const isPending = pendingLink === item.link;
-                  const isAlreadySelected = Array.from(subscribedKeys).some((key) => key.startsWith(`${item.link}-`));
+                  const isAlreadySelected = subscribedVoiceovers.length > 0;
                   return (
                     <Card key={`${day.date_str}-${item.link}-${item.time}`} className="schedule-row">
                       <LazyImage className="schedule-row__poster" src={item.poster_url} alt={item.title} />
@@ -159,6 +177,14 @@ export function Schedule({ refreshKey }: ScheduleProps) {
                           {item.time || "В течение дня"}
                         </Badge>
                         <h2>{item.title}</h2>
+                        {subscribedVoiceovers.length ? (
+                          <div className="subscription-chips" aria-label="Уже добавленные озвучки">
+                            {subscribedVoiceovers.slice(0, 2).map((voiceover) => (
+                              <span key={voiceover}>{voiceover}</span>
+                            ))}
+                            {subscribedVoiceovers.length > 2 ? <span>+{subscribedVoiceovers.length - 2}</span> : null}
+                          </div>
+                        ) : null}
                       </div>
                       <div className="schedule-row__actions">
                         <Button size="icon" variant={isAlreadySelected ? "secondary" : "primary"} disabled={isPending} aria-label="Подписаться" onClick={() => openVoiceovers(item)}>
@@ -194,9 +220,16 @@ export function Schedule({ refreshKey }: ScheduleProps) {
             </div>
             <div className="voiceover-list">
               {modal.details.voiceovers.map((voiceover) => (
-                <Button key={voiceover} variant="secondary" disabled={pendingVoiceover === voiceover} onClick={() => subscribeFromSchedule(voiceover)}>
-                  {pendingVoiceover === voiceover ? <Loader2 className="spin" size={16} /> : <Plus size={16} />}
-                  {voiceover}
+                <Button
+                  key={voiceover}
+                  className="voiceover-option"
+                  variant={subscriptionIndex.byAnimeVoiceover.has(subscriptionKey(modal.item.link, voiceover)) ? "secondary" : "primary"}
+                  disabled={pendingVoiceover === voiceover || subscriptionIndex.byAnimeVoiceover.has(subscriptionKey(modal.item.link, voiceover))}
+                  onClick={() => subscribeFromSchedule(voiceover)}
+                >
+                  {pendingVoiceover === voiceover ? <Loader2 className="spin" size={16} /> : subscriptionIndex.byAnimeVoiceover.has(subscriptionKey(modal.item.link, voiceover)) ? <Check size={16} /> : <Plus size={16} />}
+                  <span>{voiceover}</span>
+                  {subscriptionIndex.byAnimeVoiceover.has(subscriptionKey(modal.item.link, voiceover)) ? <small>уже добавлено</small> : null}
                 </Button>
               ))}
             </div>
