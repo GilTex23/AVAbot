@@ -564,6 +564,21 @@ button {
 input[type="time"].input {
   -webkit-appearance: none;
   appearance: none;
+  height: 50px;
+  line-height: 50px;
+  padding-top: 0;
+  padding-bottom: 0;
+  text-align: center;
+}
+
+input[type="time"].input::-webkit-date-and-time-value {
+  min-height: 50px;
+  line-height: 50px;
+  text-align: center;
+}
+
+input[type="time"].input::-webkit-calendar-picker-indicator {
+  display: none;
 }
 
 .textarea {
