@@ -3,6 +3,16 @@ import type { AnimeDetails, QuietHoursSettings, ScheduleDay, ScheduleItem, Subsc
 
 const devTgId = import.meta.env.VITE_DEV_TG_ID as string | undefined;
 
+export class ApiError extends Error {
+  status: number;
+
+  constructor(status: number, message: string) {
+    super(message);
+    this.name = "ApiError";
+    this.status = status;
+  }
+}
+
 function authQuery() {
   return devTgId ? `tg_id=${encodeURIComponent(devTgId)}` : "";
 }
@@ -15,6 +25,7 @@ async function fetchJson<T>(path: string, options?: RequestInit): Promise<T> {
   const response = await fetch(url, {
     ...options,
     headers: {
+      Accept: "application/json",
       "Content-Type": "application/json",
       ...(initData ? { "X-Telegram-Init-Data": initData } : {}),
       ...options?.headers,
@@ -22,10 +33,32 @@ async function fetchJson<T>(path: string, options?: RequestInit): Promise<T> {
   });
 
   if (!response.ok) {
-    throw new Error(await response.text());
+    throw new ApiError(response.status, await readErrorMessage(response));
   }
 
   return response.json() as Promise<T>;
+}
+
+async function readErrorMessage(response: Response) {
+  const rawText = await response.text();
+  if (!rawText) {
+    return response.statusText || "Request failed";
+  }
+
+  try {
+    const parsed: unknown = JSON.parse(rawText);
+    if (isErrorPayload(parsed)) {
+      return parsed.detail;
+    }
+  } catch {
+    // Non-JSON backend/proxy errors are still useful as plain text.
+  }
+
+  return rawText;
+}
+
+function isErrorPayload(value: unknown): value is { detail: string } {
+  return typeof value === "object" && value !== null && "detail" in value && typeof (value as { detail: unknown }).detail === "string";
 }
 
 export function getProfile(): Promise<UserProfile> {

@@ -2,6 +2,7 @@ import { ExternalLink, ShieldCheck } from "lucide-react";
 import { Button } from "../components/ui/button";
 import { Card } from "../components/ui/card";
 import { botUrl } from "../lib/config";
+import { openTelegramLink } from "../lib/telegram";
 
 export function AccessGate() {
   return (
@@ -15,7 +16,7 @@ export function AccessGate() {
           Бот следит за новыми сериями, расписанием выхода и выбранными озвучками. Данные берутся с сайта animego.me, а доступ к настройкам
           подписок защищен через Telegram.
         </p>
-        <Button variant="primary" onClick={() => window.open(botUrl, "_blank", "noopener,noreferrer")}>
+        <Button variant="primary" onClick={() => openTelegramLink(botUrl)}>
           <ExternalLink size={17} />
           Перейти к боту
         </Button>

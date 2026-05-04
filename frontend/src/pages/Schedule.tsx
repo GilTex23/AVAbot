@@ -7,6 +7,7 @@ import { Input } from "../components/ui/input";
 import { LazyImage } from "../components/ui/LazyImage";
 import { addScheduleSubscription, getAnimeDetails, getSchedule } from "../services/api";
 import type { AnimeDetails, ScheduleDay, ScheduleItem } from "../lib/types";
+import { hapticNotification } from "../lib/telegram";
 import { openAnime } from "../lib/utils";
 
 type ScheduleProps = {
@@ -72,19 +73,23 @@ export function Schedule({ refreshKey }: ScheduleProps) {
     try {
       const details = await getAnimeDetails(item.link);
       if (details.status?.toLowerCase().includes("вышел")) {
+        hapticNotification("warning");
         setNotice("Этот тайтл уже полностью вышел, подписка не нужна.");
         return;
       }
       if (details.type?.toLowerCase().includes("фильм")) {
+        hapticNotification("warning");
         setNotice("На фильмы подписка не оформляется, новых серий у них не будет.");
         return;
       }
       if (!details.voiceovers.length) {
+        hapticNotification("warning");
         setNotice("Для этого тайтла не удалось найти доступные озвучки.");
         return;
       }
       setModal({ item, details });
     } catch {
+      hapticNotification("error");
       setNotice("Не удалось получить список озвучек. Попробуйте ещё раз.");
     } finally {
       setPendingLink(null);
@@ -101,9 +106,11 @@ export function Schedule({ refreshKey }: ScheduleProps) {
     try {
       const result = await addScheduleSubscription(modal.item, voiceover, modal.details.total_episodes);
       setSubscribedKeys((current) => new Set(current).add(key));
+      hapticNotification(result.created ? "success" : "warning");
       setNotice(result.created ? "Подписка добавлена." : "Такая подписка уже есть.");
       setModal(null);
     } catch {
+      hapticNotification("error");
       setNotice("Не удалось оформить подписку. Попробуйте ещё раз.");
     } finally {
       setPendingVoiceover(null);

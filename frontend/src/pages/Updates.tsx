@@ -6,6 +6,7 @@ import { Card } from "../components/ui/card";
 import { LazyImage } from "../components/ui/LazyImage";
 import { addSubscription, getUpdates } from "../services/api";
 import type { UpdateItem } from "../lib/types";
+import { hapticNotification } from "../lib/telegram";
 import { openAnime, voiceovers } from "../lib/utils";
 
 type UpdatesProps = {
@@ -53,8 +54,10 @@ export function Updates({ favoriteVoiceover, refreshKey }: UpdatesProps) {
     try {
       const result = await addSubscription(item);
       setSubscribedKeys((current) => new Set(current).add(key));
+      hapticNotification(result.created ? "success" : "warning");
       setNotice(result.created ? "Подписка добавлена." : "Такая подписка уже есть.");
     } catch {
+      hapticNotification("error");
       setNotice("Не удалось оформить подписку. Попробуйте ещё раз.");
     } finally {
       setPendingLink(null);

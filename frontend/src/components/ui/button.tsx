@@ -1,4 +1,5 @@
 import type { ButtonHTMLAttributes, ReactNode } from "react";
+import { hapticImpact } from "../../lib/telegram";
 import { cx } from "../../lib/utils";
 
 type ButtonProps = ButtonHTMLAttributes<HTMLButtonElement> & {
@@ -7,9 +8,19 @@ type ButtonProps = ButtonHTMLAttributes<HTMLButtonElement> & {
   children: ReactNode;
 };
 
-export function Button({ className, variant = "secondary", size = "md", children, ...props }: ButtonProps) {
+export function Button({ className, variant = "secondary", size = "md", children, onClick, disabled, ...props }: ButtonProps) {
   return (
-    <button className={cx("button", `button--${variant}`, `button--${size}`, className)} {...props}>
+    <button
+      className={cx("button", `button--${variant}`, `button--${size}`, className)}
+      disabled={disabled}
+      onClick={(event) => {
+        if (!disabled) {
+          hapticImpact(variant === "danger" ? "medium" : "light");
+        }
+        onClick?.(event);
+      }}
+      {...props}
+    >
       {children}
     </button>
   );

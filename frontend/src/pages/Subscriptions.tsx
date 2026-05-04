@@ -6,6 +6,7 @@ import { Card } from "../components/ui/card";
 import { LazyImage } from "../components/ui/LazyImage";
 import { deleteSubscription, getSubscriptions } from "../services/api";
 import type { SubscriptionItem } from "../lib/types";
+import { hapticNotification } from "../lib/telegram";
 import { openAnime } from "../lib/utils";
 
 type SubscriptionsProps = {
@@ -49,8 +50,10 @@ export function Subscriptions({ refreshKey }: SubscriptionsProps) {
     try {
       await deleteSubscription(id);
       setItems((current) => current.filter((item) => item.id !== id));
+      hapticNotification("success");
       setNotice("Подписка удалена.");
     } catch {
+      hapticNotification("error");
       setNotice("Не удалось удалить подписку. Попробуйте ещё раз.");
     } finally {
       setPendingDeleteId(null);

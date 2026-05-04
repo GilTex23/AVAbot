@@ -6,6 +6,7 @@ import { Card } from "../components/ui/card";
 import { Switch } from "../components/ui/switch";
 import { saveQuietHours, saveVoiceover } from "../services/api";
 import type { UserProfile } from "../lib/types";
+import { hapticNotification } from "../lib/telegram";
 import { voiceovers } from "../lib/utils";
 import { formatTimeZoneLabel, getTimeZones } from "../lib/timezones";
 
@@ -39,8 +40,10 @@ export function Settings({ user, onUserUpdated }: SettingsProps) {
     try {
       const result = await saveVoiceover(voiceover);
       onUserUpdated(user ? { ...user, favorite_voiceover: result.favorite_voiceover } : null);
+      hapticNotification("success");
       setNotice("Озвучка сохранена.");
     } catch {
+      hapticNotification("error");
       setNotice("Не удалось сохранить озвучку.");
     } finally {
       setSavingVoiceover(false);
@@ -68,8 +71,10 @@ export function Settings({ user, onUserUpdated }: SettingsProps) {
             }
           : null,
       );
+      hapticNotification("success");
       setNotice("Тихие часы сохранены.");
     } catch {
+      hapticNotification("error");
       setNotice("Не удалось сохранить тихие часы.");
     } finally {
       setSavingQuiet(false);

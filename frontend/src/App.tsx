@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { AppLayout } from "./components/layout/AppLayout";
 import type { TabId, UserProfile } from "./lib/types";
-import { bootTelegramShell, isTelegramMiniApp } from "./lib/telegram";
+import { bootTelegramShell, hapticNotification, isTelegramMiniApp, requestWriteAccessOnce, showTelegramAlert } from "./lib/telegram";
 import { getProfile } from "./services/api";
 import { AccessGate } from "./pages/AccessGate";
 import { Schedule } from "./pages/Schedule";
@@ -18,7 +18,15 @@ export default function App() {
   useEffect(() => {
     bootTelegramShell();
     if (isTelegramMiniApp()) {
-      getProfile().then(setUser);
+      getProfile()
+        .then((profile) => {
+          setUser(profile);
+          requestWriteAccessOnce();
+        })
+        .catch(() => {
+          hapticNotification("error");
+          showTelegramAlert("Не удалось загрузить профиль mini app. Попробуйте открыть приложение ещё раз.");
+        });
     }
   }, []);
 
@@ -35,6 +43,10 @@ export default function App() {
     setRefreshing(true);
     try {
       setUser(await getProfile());
+      hapticNotification("success");
+    } catch {
+      hapticNotification("error");
+      showTelegramAlert("Не удалось обновить данные. Попробуйте ещё раз.");
     } finally {
       setRefreshing(false);
     }
