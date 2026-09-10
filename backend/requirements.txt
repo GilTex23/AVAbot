@@ -14,3 +14,4 @@ sqladmin>=0.23.0
 starlette>=0.52.1
 itsdangerous
 alembic>=1.13.0
+cryptography>=42.0.0

@@ -22,11 +22,13 @@ from sqladmin import Admin
 import config
 from loader import bot, dp
 from api.miniapp import router as miniapp_router
+from api.admin import router as miniapp_admin_router
 from handlers import user, admin, other
 from middlewares.callback import CallbackAnswerMiddleware
 from services.logger import setup_logger
-from services.checker import check_updates, check_missing_episodes_info
+from services.checker import check_updates, check_subscriptions_status
 from services.notifier import notify_admins
+from services import scraper_keys
 from database.requests import init_db, engine
 
 from services.admin_panel import authentication_backend, UserAdmin, SubscriptionAdmin
@@ -43,6 +45,8 @@ async def lifespan(app: FastAPI):
 
     await init_db()
     logger.info("Database initialize successfully")
+
+    await scraper_keys.bootstrap()
 
     dp.callback_query.middleware(CallbackAnswerMiddleware())
     logger.info("Callback query middleware installed successfully")
@@ -65,7 +69,9 @@ async def lifespan(app: FastAPI):
     logger.info("Webhook ready")
 
     scheduler.add_job(check_updates, "interval", minutes=20, args=[bot], id="updates_checker", replace_existing=True)
-    scheduler.add_job(check_missing_episodes_info, "cron", hour=21, minute=0, args=[bot])
+    scheduler.add_job(check_subscriptions_status, "cron", hour=21, minute=0, args=[bot], id="subscriptions_status_checker", replace_existing=True)
+    # /account не тратит кредиты; первый опрос сразу после старта
+    scheduler.add_job(scraper_keys.refresh_all_keys, "interval", hours=6, args=[bot], id="scraper_keys_refresh", replace_existing=True, next_run_time=datetime.now())
     scheduler.start()
 
     await notify_admins(bot, f"Бот успешно запущен и готов к работе!", level="INFO")
@@ -83,6 +89,7 @@ app = FastAPI(lifespan=lifespan)
 
 app.add_middleware(ProxyHeadersMiddleware, trusted_hosts="*")
 app.include_router(miniapp_router)
+app.include_router(miniapp_admin_router)
 
 if FRONTEND_DIST_DIR.exists():
     assets_dir = FRONTEND_DIST_DIR / "assets"

@@ -16,7 +16,7 @@ router = APIRouter(prefix="/api/miniapp", tags=["miniapp"])
 TIME_RE = re.compile(r"^([01]\d|2[0-3]):[0-5]\d$")
 
 
-def _validate_init_data(init_data: str) -> dict:
+def validate_init_data(init_data: str, max_age_seconds: int = 86400) -> dict:
     pairs = dict(parse_qsl(init_data, keep_blank_values=True))
     received_hash = pairs.pop("hash", "")
     if not received_hash:
@@ -30,7 +30,7 @@ def _validate_init_data(init_data: str) -> dict:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid Telegram signature")
 
     auth_date = int(pairs.get("auth_date", "0") or 0)
-    if auth_date and time.time() - auth_date > 86400:
+    if time.time() - auth_date > max_age_seconds:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Telegram session expired")
 
     user_raw = pairs.get("user")
@@ -47,7 +47,7 @@ async def get_miniapp_user(request: Request) -> dict:
         or request.query_params.get("tgWebAppData")
     )
     if init_data:
-        return _validate_init_data(init_data)
+        return validate_init_data(init_data)
 
     if config.MINIAPP_DEV_AUTH_ENABLED:
         tg_id = request.query_params.get("tg_id")
@@ -95,6 +95,7 @@ async def get_me(current_user: dict = Depends(get_miniapp_user)):
         "quiet_hours_end": user.quiet_hours_end,
         "quiet_timezone": user.quiet_timezone,
         "subscriptions_count": len(subscriptions),
+        "is_admin": tg_id in config.ADMIN_IDS,
     }
 
 

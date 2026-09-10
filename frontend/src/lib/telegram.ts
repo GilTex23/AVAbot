@@ -26,6 +26,12 @@ type TelegramWebApp = {
   MainButton?: {
     hide: () => void;
   };
+  BackButton?: {
+    show: () => void;
+    hide: () => void;
+    onClick: (callback: () => void) => void;
+    offClick: (callback: () => void) => void;
+  };
 };
 
 declare global {
@@ -101,6 +107,20 @@ export function showTelegramAlert(message: string) {
     return;
   }
   window.alert(message);
+}
+
+/** Показывает системную кнопку «Назад» Telegram; возвращает функцию, которая её убирает */
+export function showTelegramBackButton(onBack: () => void) {
+  const backButton = getTelegramWebApp()?.BackButton;
+  if (!backButton) {
+    return () => {};
+  }
+  backButton.onClick(onBack);
+  backButton.show();
+  return () => {
+    backButton.offClick(onBack);
+    backButton.hide();
+  };
 }
 
 export function hapticImpact(style: "light" | "medium" | "heavy" | "rigid" | "soft" = "light") {

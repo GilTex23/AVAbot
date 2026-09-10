@@ -1,4 +1,4 @@
-import { Check, Loader2, Save, SlidersHorizontal } from "lucide-react";
+import { Check, ChevronRight, Loader2, Save, ShieldCheck, SlidersHorizontal } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { Badge } from "../components/ui/badge";
 import { Button } from "../components/ui/button";
@@ -13,9 +13,10 @@ import { formatTimeZoneLabel, getTimeZones } from "../lib/timezones";
 type SettingsProps = {
   user?: UserProfile | null;
   onUserUpdated: (user: UserProfile | null) => void;
+  onOpenAdmin: () => void;
 };
 
-export function Settings({ user, onUserUpdated }: SettingsProps) {
+export function Settings({ user, onUserUpdated, onOpenAdmin }: SettingsProps) {
   const [voiceover, setVoiceover] = useState(user?.favorite_voiceover || "AniLiberty");
   const [quietMode, setQuietMode] = useState(user?.quiet_hours_enabled || false);
   const [quietStart, setQuietStart] = useState(user?.quiet_hours_start || "23:00");
@@ -100,6 +101,19 @@ export function Settings({ user, onUserUpdated }: SettingsProps) {
         </div>
         <Badge tone="green">{user?.subscriptions_count || 0} подписок</Badge>
       </Card>
+
+      {user?.is_admin ? (
+        <button type="button" className="card settings-card settings-link" onClick={onOpenAdmin}>
+          <span className="settings-card__head">
+            <ShieldCheck size={22} />
+            <span className="settings-link__text">
+              <span className="settings-link__title">Администрирование</span>
+              <span className="settings-link__caption">Ключи ScraperAPI и проверка подписок</span>
+            </span>
+          </span>
+          <ChevronRight size={20} />
+        </button>
+      ) : null}
 
       <Card className="settings-card settings-card--column">
         <h2>Любимая озвучка</h2>

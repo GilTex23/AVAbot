@@ -5,10 +5,10 @@ import logging
 import urllib.parse
 import asyncio
 import time
-from random import choice
 import config
 from aiogram import Bot
 from services.notifier import notify_admins
+from services.scraper_keys import key_pool, STATUS_EXHAUSTED, STATUS_INVALID
 from utils.antispam import AntiSpamNotify
 
 
@@ -75,95 +75,29 @@ def clean_asset_url(url: str) -> str:
     return url
 
 
-async def get_html_scraperapi_legacy(url: str, session: aiohttp.ClientSession = None, bot: Bot=None):
+def parse_total_episodes(episodes_text: str | None) -> int | None:
     """
-    Получает HTML через ScraperAPI
+    Общее число серий из поля «Эпизоды» на AnimeGO:
+    '6 / 13' -> 13, '11 / ?' -> None, '14' -> 14 (у вышедшего тайтла AnimeGO пишет одно число)
     """
-    close_session = False
+    if not episodes_text:
+        return None
+    total_str = episodes_text.split('/')[-1].strip()
+    return int(total_str) if total_str.isdigit() else None
 
-    if session is None:
-        session = aiohttp.ClientSession()
-        close_session = True
 
-    api_keys = config.SCRAPER_API_KEYS.copy()
-    attempt = 1
-    check_attempt = lambda x_: True if x_ <= 7 else False
-    while True:
-        try:
-            if api_keys:
-                api_key = choice(api_keys)
-            else:
-                antispam.failed_requests += 1
-                logger.critical(f"All your API keys are exhausted or invalid!\nPlease check logs and your API keys.\nFailed requests until restart: {antispam.failed_requests}")
-                if not antispam.is_notified():
-                    await notify_admins(
-                        bot,
-                        "Все API ключи ScraperAPI исчерпаны или недействительны!\n\n"
-                        "Парсинг аниме временно недоступен.\n"
-                        "Необходимо добавить новые ключи в конфигурацию.",
-                        level="CRITICAL"
-                    )
-                    antispam.set_notify_timestamp()
-                return None
-            params = {
-                'api_key': api_key[1],
-                'url': url.strip(),
-                'device_type': 'desktop',
-                'country_code': 'ru'
-            }
-            async with session.get(SCRAPER_API_URL, params=params, timeout=aiohttp.ClientTimeout(total=30)) as response:
-                logger.info(f"ScraperAPI request to {url} - Status: {response.status} - Used API name: {api_key[0]}")
-                if response.status == 200:
-                    return await response.text()
-                elif response.status in [500, 404, 429, 400, 403, 401]:
-                    if check_attempt(attempt):
-                        if response.status == 500:
-                            logger.error(f"Request failed. It's worth checking the URL - Attempt {attempt}")
-                            attempt += 1
-                            await asyncio.sleep(1)
-                        elif response.status == 404:
-                            logger.error(f"Bad Gateway - The requested page does not exist - Attempt {attempt}")
-                            attempt += 5
-                            await asyncio.sleep(0.3)
-                        elif response.status == 429:
-                            logger.error(f"To many concurrent requests - Attempt {attempt}")
-                            attempt += 1
-                            await asyncio.sleep(0.3)
-                        elif response.status == 400:
-                            logger.error(f"Error, invalid request. Make sure that your URL is entered correctly - Attempt {attempt}")
-                            attempt += 5
-                            await asyncio.sleep(0.5)
-                        elif response.status == 403:
-                            logger.error(f"API limit exceeded - API Name: {api_key[0]}")
-                            api_keys.remove(api_key)
-                            attempt += 1
-                            await asyncio.sleep(0.1)
-                        elif response.status == 401:
-                            logger.error(f"An unauthorized request. Please make sure that your API key \"{api_key[0]}\" is valid.")
-                            api_keys.remove(api_key)
-                            await asyncio.sleep(0.1)
-                        continue
-                    else:
-                        logger.critical("Too many attempts.")
-                else:
-                    try:
-                        error_text = await response.text()
-
-                        logger.error(f"Response headers: {dict(response.headers)}")
-                        logger.error(f"Response text: {error_text[:900]}")
-                    except Exception as e:
-                        logger.error(f"Failed to get error text: {e}")
-                return None
-
-        except asyncio.TimeoutError:
-            logger.error(f"Timeout error for {url}")
-            return None
-        except Exception as e:
-            logger.error(f"Network error for {url}: {e}")
-            return None
-        finally:
-            if close_session:
-                await session.close()
+async def _notify_no_keys(bot: Bot):
+    antispam.failed_requests += 1
+    logger.critical(f"All your API keys are exhausted or invalid!\nPlease check logs and your API keys.\nFailed requests until restart: {antispam.failed_requests}")
+    if not antispam.is_notified():
+        await notify_admins(
+            bot,
+            "Все API ключи ScraperAPI исчерпаны или недействительны!\n\n"
+            "Парсинг аниме временно недоступен.\n"
+            "Добавьте или включите ключи в админке мини-аппа (Настройки → Администрирование).",
+            level="CRITICAL"
+        )
+        antispam.set_notify_timestamp()
 
 
 async def get_html(url: str, session: aiohttp.ClientSession = None, bot: Bot=None):
@@ -202,84 +136,67 @@ async def get_html(url: str, session: aiohttp.ClientSession = None, bot: Bot=Non
             except Exception as e:
                 logger.warning(f"Direct request error for {url}: {e}; trying ScraperAPI")
 
-        api_keys = config.SCRAPER_API_KEYS.copy()
+        tried_keys: set[int] = set()
         attempt = 1
-        check_attempt = lambda x_: True if x_ <= 7 else False
-        while True:
+        while attempt <= 7:
+            key = key_pool.pick(exclude=tried_keys)
+            if key is None:
+                await _notify_no_keys(bot)
+                return None
+
+            params = {
+                'api_key': key.api_key,
+                'url': url.strip(),
+                'device_type': 'desktop',
+                'country_code': 'ru'
+            }
             try:
-                if api_keys:
-                    api_key = choice(api_keys)
-                else:
-                    antispam.failed_requests += 1
-                    logger.critical(f"All your API keys are exhausted or invalid!\nPlease check logs and your API keys.\nFailed requests until restart: {antispam.failed_requests}")
-                    if not antispam.is_notified():
-                        await notify_admins(
-                            bot,
-                            "Все API ключи ScraperAPI исчерпаны или недействительны!\n\n"
-                            "Парсинг аниме временно недоступен.\n"
-                            "Необходимо добавить новые ключи в конфигурацию.",
-                            level="CRITICAL"
-                        )
-                        antispam.set_notify_timestamp()
-                    return None
-                params = {
-                    'api_key': api_key[1],
-                    'url': url.strip(),
-                    'device_type': 'desktop',
-                    'country_code': 'ru'
-                }
                 async with session.get(SCRAPER_API_URL, params=params, timeout=aiohttp.ClientTimeout(total=30)) as response:
-                    logger.info(f"ScraperAPI request to {url} - Status: {response.status} - Used API name: {api_key[0]}")
+                    logger.info(f"ScraperAPI request to {url} - Status: {response.status} - Used API name: {key.name}")
                     if response.status == 200:
                         html_text = await response.text()
+                        await key_pool.report_success(key, bot)
                         _set_cached_html(url, html_text)
                         return html_text
-                    elif response.status in [500, 404, 429, 400, 403, 401]:
-                        if check_attempt(attempt):
-                            if response.status == 500:
-                                logger.error(f"Request failed. It's worth checking the URL - Attempt {attempt}")
-                                attempt += 1
-                                await asyncio.sleep(1)
-                            elif response.status == 404:
-                                logger.error(f"Bad Gateway - The requested page does not exist - Attempt {attempt}")
-                                attempt += 5
-                                await asyncio.sleep(0.3)
-                            elif response.status == 429:
-                                logger.error(f"To many concurrent requests - Attempt {attempt}")
-                                attempt += 1
-                                await asyncio.sleep(0.3)
-                            elif response.status == 400:
-                                logger.error(f"Error, invalid request. Make sure that your URL is entered correctly - Attempt {attempt}")
-                                attempt += 5
-                                await asyncio.sleep(0.5)
-                            elif response.status == 403:
-                                logger.error(f"API limit exceeded - API Name: {api_key[0]}")
-                                api_keys.remove(api_key)
-                                attempt += 1
-                                await asyncio.sleep(0.1)
-                            elif response.status == 401:
-                                logger.error(f"An unauthorized request. Please make sure that your API key \"{api_key[0]}\" is valid.")
-                                api_keys.remove(api_key)
-                                await asyncio.sleep(0.1)
-                            continue
-                        else:
-                            logger.critical("Too many attempts.")
-                    else:
-                        try:
-                            error_text = await response.text()
 
-                            logger.error(f"Response headers: {dict(response.headers)}")
-                            logger.error(f"Response text: {error_text[:900]}")
-                        except Exception as e:
-                            logger.error(f"Failed to get error text: {e}")
+                    error_text = f"{response.status}: {(await response.text())[:300]}"
+
+                if response.status == 401:
+                    logger.error(f"An unauthorized request. Please make sure that your API key \"{key.name}\" is valid.")
+                    await key_pool.report_failure(key, error_text, bot, status=STATUS_INVALID)
+                    tried_keys.add(key.id)
+                elif response.status == 403:
+                    logger.error(f"API limit exceeded - API Name: {key.name}")
+                    await key_pool.report_failure(key, error_text, bot, status=STATUS_EXHAUSTED)
+                    tried_keys.add(key.id)
+                    attempt += 1
+                elif response.status == 500:
+                    logger.error(f"Request failed. It's worth checking the URL - Attempt {attempt}")
+                    await key_pool.report_failure(key, error_text, bot)
+                    attempt += 1
+                    await asyncio.sleep(1)
+                elif response.status == 429:
+                    logger.error(f"To many concurrent requests - Attempt {attempt}")
+                    await key_pool.report_failure(key, error_text, bot)
+                    attempt += 1
+                    await asyncio.sleep(0.3)
+                else:
+                    # 404 (страницы нет), 400 (кривой запрос) и прочее повтор не исправит
+                    logger.error(f"ScraperAPI request to {url} failed. Response: {error_text}")
+                    await key_pool.report_failure(key, error_text, bot)
                     return None
 
             except asyncio.TimeoutError:
                 logger.error(f"Timeout error for {url}")
+                await key_pool.report_failure(key, "Timeout", bot)
                 return None
             except Exception as e:
                 logger.error(f"Network error for {url}: {e}")
+                await key_pool.report_failure(key, f"Network error: {e}", bot)
                 return None
+
+        logger.critical("Too many attempts.")
+        return None
     finally:
         if close_session:
             await session.close()
@@ -375,16 +292,8 @@ async def get_anime_info(url: str, bot: Bot):
         # 2. Статус
         info['status'] = get_value("Статус")
 
-        # 3. Эпизоды (формат "6 / 13" или "6 / ?").
-        episodes_str = get_value("Эпизоды")
-        info['total_episodes'] = None
-
-        if episodes_str:
-            parts = episodes_str.split('/')
-            if len(parts) == 2:
-                total_str = parts[1].strip()
-                if total_str.isdigit():
-                    info['total_episodes'] = int(total_str)
+        # 3. Эпизоды ("6 / 13", "6 / ?" или просто "14" у вышедшего тайтла)
+        info['total_episodes'] = parse_total_episodes(get_value("Эпизоды"))
 
         return info
 
@@ -500,12 +409,7 @@ async def get_anime_details(url: str, bot: Bot):
         info['status'] = status_div.get_text(strip=True) if status_div else None
 
         episodes_div = get_value("Эпизоды")
-        info['total_episodes'] = None
-        if episodes_div:
-            ep_text = episodes_div.get_text(strip=True)
-            parts = ep_text.split('/')
-            if len(parts) == 2 and parts[1].strip().isdigit():
-                info['total_episodes'] = int(parts[1].strip())
+        info['total_episodes'] = parse_total_episodes(episodes_div.get_text(strip=True) if episodes_div else None)
 
         voiceover_div = get_value("Озвучка")
         voiceovers_list = []

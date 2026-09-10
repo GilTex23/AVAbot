@@ -1,4 +1,4 @@
-from sqlalchemy import BigInteger, Boolean, String, Column, ForeignKey, Integer, DateTime
+from sqlalchemy import BigInteger, Boolean, String, Column, ForeignKey, Integer, DateTime, Date
 from sqlalchemy.orm import DeclarativeBase, relationship
 from sqlalchemy.ext.asyncio import AsyncAttrs
 import datetime
@@ -37,5 +37,41 @@ class Subscription(Base):
     total_episodes = Column(Integer, nullable=True)
 
     last_episode = Column(String, nullable=True)
+    # Когда в подписке последний раз появлялась новая серия (UTC); нужно для чистки брошенных озвучек
+    last_episode_at = Column(DateTime, nullable=True, default=datetime.datetime.utcnow)
+    # Когда последний раз смотрели страницу тайтла (UTC); при подписке она только что загружена
+    info_checked_at = Column(DateTime, nullable=True, default=datetime.datetime.utcnow)
 
     user = relationship("User", back_populates="subscriptions")
+
+
+class ScraperApiKey(Base):
+    __tablename__ = 'scraper_api_keys'
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    name = Column(String, nullable=False)
+    email = Column(String, nullable=True)
+    key_encrypted = Column(String, nullable=False)  # Fernet, секрет в SCRAPER_KEYS_SECRET
+    enabled = Column(Boolean, nullable=False, default=True)
+    status = Column(String, nullable=False, default="active")  # active / low / exhausted / invalid
+
+    # Данные из https://api.scraperapi.com/account
+    request_count = Column(Integer, nullable=True)
+    request_limit = Column(Integer, nullable=True)
+    failed_request_count = Column(Integer, nullable=True)
+    subscription_date = Column(DateTime, nullable=True)
+    last_checked_at = Column(DateTime, nullable=True)
+
+    last_used_at = Column(DateTime, nullable=True)
+    last_error = Column(String, nullable=True)
+    last_error_at = Column(DateTime, nullable=True)
+    created_at = Column(DateTime, default=datetime.datetime.utcnow)
+
+
+class ScraperApiKeyUsage(Base):
+    __tablename__ = 'scraper_api_key_usage'
+
+    key_id = Column(Integer, ForeignKey('scraper_api_keys.id', ondelete='CASCADE'), primary_key=True)
+    day = Column(Date, primary_key=True)
+    success = Column(Integer, nullable=False, default=0)
+    failed = Column(Integer, nullable=False, default=0)

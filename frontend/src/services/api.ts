@@ -1,5 +1,16 @@
 import { getTelegramInitData } from "../lib/telegram";
-import type { AnimeDetails, QuietHoursSettings, ScheduleDay, ScheduleItem, SubscriptionItem, UpdateItem, UserProfile } from "../lib/types";
+import type {
+  AnimeDetails,
+  NewScraperKey,
+  QuietHoursSettings,
+  ScheduleDay,
+  ScheduleItem,
+  ScraperKeyPatch,
+  ScraperKeysOverview,
+  SubscriptionItem,
+  UpdateItem,
+  UserProfile,
+} from "../lib/types";
 
 const devTgId = import.meta.env.VITE_DEV_TG_ID as string | undefined;
 
@@ -129,4 +140,28 @@ export function saveQuietHours(settings: QuietHoursSettings) {
     method: "PUT",
     body: JSON.stringify(settings),
   });
+}
+
+export function getAdminKeys(): Promise<ScraperKeysOverview> {
+  return fetchJson("/api/miniapp/admin/keys");
+}
+
+export function addAdminKey(key: NewScraperKey): Promise<ScraperKeysOverview> {
+  return fetchJson("/api/miniapp/admin/keys", { method: "POST", body: JSON.stringify(key) });
+}
+
+export function updateAdminKey(id: number, patch: ScraperKeyPatch): Promise<ScraperKeysOverview> {
+  return fetchJson(`/api/miniapp/admin/keys/${id}`, { method: "PATCH", body: JSON.stringify(patch) });
+}
+
+export function deleteAdminKey(id: number): Promise<ScraperKeysOverview> {
+  return fetchJson(`/api/miniapp/admin/keys/${id}`, { method: "DELETE" });
+}
+
+export function refreshAdminKeys(id?: number): Promise<ScraperKeysOverview> {
+  return fetchJson(id ? `/api/miniapp/admin/keys/${id}/refresh` : "/api/miniapp/admin/keys/refresh", { method: "POST" });
+}
+
+export function runSubscriptionsCheck(): Promise<{ started: boolean }> {
+  return fetchJson("/api/miniapp/admin/subscriptions/check", { method: "POST" });
 }

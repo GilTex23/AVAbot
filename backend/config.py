@@ -24,11 +24,19 @@ try:
     ANIMEGO_CACHE_TTL_SECONDS = int(os.getenv("ANIMEGO_CACHE_TTL_SECONDS", "300"))
     MINIAPP_DEV_AUTH_ENABLED = os.getenv("MINIAPP_DEV_AUTH_ENABLED", "false").lower() in ("1", "true", "yes", "on")
 
-    api_keys_ = [key_.split('-') for key_ in [key_.strip() for key_ in os.getenv('SCRAPER_API_KEYS', '').split(',') if key_] if key_]
-    if api_keys_:
-        SCRAPER_API_KEYS = api_keys_
-    else:
-        raise ValueError("At least one argument of SCRAPER_API_KEYS is required. Format: NAME–API_KEY, NAME2–API_KEY, ...")
+    # Шифрует ключи ScraperAPI в БД. Если его поменять, сохранённые ключи перестанут расшифровываться
+    SCRAPER_KEYS_SECRET = os.getenv("SCRAPER_KEYS_SECRET", "")
+    if not SCRAPER_KEYS_SECRET:
+        raise ValueError("SCRAPER_KEYS_SECRET is required: it encrypts ScraperAPI keys stored in the database")
+
+    # Устаревший способ: ключи из .env (NAME-API_KEY, NAME2-API_KEY) импортируются в БД при первом запуске,
+    # дальше они управляются из админки мини-аппа
+    SCRAPER_API_KEYS = [
+        tuple(part.strip() for part in item.rsplit('-', 1)) if '-' in item else (f"env-{index}", item)
+        for index, item in enumerate(
+            (item.strip() for item in os.getenv('SCRAPER_API_KEYS', '').split(',') if item.strip()), start=1
+        )
+    ]
 
     logger.info("The virtual environment is installed")
 except Exception as e:

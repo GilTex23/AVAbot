@@ -1,7 +1,8 @@
 from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 from sqlalchemy import select, update, delete, and_, func, text
+from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.orm import joinedload
-from database.models import Base, User, Subscription
+from database.models import Base, User, Subscription, ScraperApiKey, ScraperApiKeyUsage
 import datetime
 import config
 
@@ -134,6 +135,17 @@ async def update_total_episodes(sub_id: int, total_eps: int):
         await session.commit()
 
 
+async def mark_anime_info_checked(url: str):
+    """Отмечает, что страницу тайтла только что проверили (для всех подписок на него)"""
+    async with async_session() as session:
+        await session.execute(
+            update(Subscription)
+            .where(Subscription.anime_url == url)
+            .values(info_checked_at=datetime.datetime.utcnow())
+        )
+        await session.commit()
+
+
 async def get_all_subscriptions():
     """Получить все подписки для чекера (с ЖАДНОЙ подгрузкой User)"""
     async with async_session() as session:
@@ -162,9 +174,87 @@ async def update_sub_last_episode(sub_id: int, episode: str):
         await session.execute(
             update(Subscription)
             .where(Subscription.id == sub_id)
-            .values(last_episode=episode)
+            .values(last_episode=episode, last_episode_at=datetime.datetime.utcnow())
         )
         await session.commit()
+
+
+# --- SCRAPER API KEYS ---
+async def get_scraper_keys():
+    async with async_session() as session:
+        result = await session.execute(select(ScraperApiKey).order_by(ScraperApiKey.id))
+        return result.scalars().all()
+
+
+async def get_scraper_key(key_id: int):
+    async with async_session() as session:
+        return await session.scalar(select(ScraperApiKey).where(ScraperApiKey.id == key_id))
+
+
+async def count_scraper_keys() -> int:
+    async with async_session() as session:
+        return await session.scalar(select(func.count(ScraperApiKey.id)))
+
+
+async def add_scraper_key(name: str, email: str | None, key_encrypted: str, **values):
+    async with async_session() as session:
+        key = ScraperApiKey(name=name, email=email, key_encrypted=key_encrypted, **values)
+        session.add(key)
+        await session.commit()
+        await session.refresh(key)
+        return key
+
+
+async def update_scraper_key(key_id: int, **values):
+    async with async_session() as session:
+        await session.execute(update(ScraperApiKey).where(ScraperApiKey.id == key_id).values(**values))
+        await session.commit()
+
+
+async def delete_scraper_key(key_id: int):
+    async with async_session() as session:
+        await session.execute(delete(ScraperApiKey).where(ScraperApiKey.id == key_id))
+        await session.commit()
+
+
+async def record_scraper_key_usage(key_id: int, success: bool, error: str | None = None):
+    """Считает запрос в дневной статистике ключа и обновляет его счётчики"""
+    now = datetime.datetime.utcnow()
+    async with async_session() as session:
+        stmt = pg_insert(ScraperApiKeyUsage).values(
+            key_id=key_id, day=now.date(), success=int(success), failed=int(not success)
+        )
+        stmt = stmt.on_conflict_do_update(
+            index_elements=[ScraperApiKeyUsage.key_id, ScraperApiKeyUsage.day],
+            set_={
+                "success": ScraperApiKeyUsage.success + stmt.excluded.success,
+                "failed": ScraperApiKeyUsage.failed + stmt.excluded.failed,
+            },
+        )
+        await session.execute(stmt)
+
+        if success:
+            values = {"request_count": func.coalesce(ScraperApiKey.request_count, 0) + 1, "last_used_at": now}
+        else:
+            values = {"last_error": (error or "Unknown error")[:500], "last_error_at": now}
+        await session.execute(update(ScraperApiKey).where(ScraperApiKey.id == key_id).values(**values))
+        await session.commit()
+
+
+async def get_scraper_usage(since: datetime.date):
+    """Суммарные запросы по всем ключам за каждый день начиная с since"""
+    async with async_session() as session:
+        result = await session.execute(
+            select(
+                ScraperApiKeyUsage.day,
+                func.sum(ScraperApiKeyUsage.success),
+                func.sum(ScraperApiKeyUsage.failed),
+            )
+            .where(ScraperApiKeyUsage.day >= since)
+            .group_by(ScraperApiKeyUsage.day)
+            .order_by(ScraperApiKeyUsage.day)
+        )
+        return result.all()
 
 
 # --- ADMIN FUNCTIONS ---
