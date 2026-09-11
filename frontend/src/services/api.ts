@@ -10,6 +10,7 @@ import type {
   SubscriptionItem,
   UpdateItem,
   UserProfile,
+  WeekItem,
 } from "../lib/types";
 
 const devTgId = import.meta.env.VITE_DEV_TG_ID as string | undefined;
@@ -113,6 +114,15 @@ export function addScheduleSubscription(item: ScheduleItem, voiceover: string, t
 
 export function deleteSubscription(id: number) {
   return fetchJson(`/api/miniapp/subscriptions/${id}`, { method: "DELETE" });
+}
+
+export function getMyWeek(): Promise<{ items: WeekItem[] }> {
+  return fetchJson("/api/miniapp/my-week");
+}
+
+/** Текст ошибки для пользователя: причина отказа от бэкенда (400/409) или общий текст */
+export function errorText(error: unknown, fallback: string) {
+  return error instanceof ApiError && error.status >= 400 && error.status < 500 && error.status !== 401 ? error.message : fallback;
 }
 
 export function getSchedule(): Promise<{ days: ScheduleDay[] }> {

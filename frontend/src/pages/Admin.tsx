@@ -14,7 +14,7 @@ import {
   runSubscriptionsCheck,
   updateAdminKey,
 } from "../services/api";
-import type { ScraperKey, ScraperKeyPatch, ScraperKeyStatus, ScraperKeysOverview, ScraperUsageDay } from "../lib/types";
+import type { ParserHealth, ScraperKey, ScraperKeyPatch, ScraperKeyStatus, ScraperKeysOverview, ScraperUsageDay } from "../lib/types";
 import { hapticNotification, showTelegramBackButton } from "../lib/telegram";
 import { cx } from "../lib/utils";
 
@@ -239,6 +239,8 @@ export function Admin({ refreshKey, onBack }: AdminProps) {
             </div>
           </Card>
 
+          {data.parser_health ? <ParserHealthCard health={data.parser_health} /> : null}
+
           <section className="admin-subtitle">
             <h2>Ключи</h2>
             {!adding ? (
@@ -285,6 +287,67 @@ export function Admin({ refreshKey, onBack }: AdminProps) {
         </>
       ) : null}
     </div>
+  );
+}
+
+function ParserHealthCard({ health }: { health: ParserHealth }) {
+  const checked = Boolean(health.last_attempt_at);
+  // Незнакомый часовой пояс — не сбой: уведомления работают, просто время с этой загрузки не используется
+  const failing = health.consecutive_failures > 0;
+  const badge: { label: string; tone: Tone } = !checked
+    ? { label: "Ещё не проверялся", tone: "muted" }
+    : failing
+      ? { label: health.consecutive_failures >= health.failure_threshold ? "Не работает" : "Сбой", tone: "red" }
+      : health.problems.length
+        ? { label: "Внимание", tone: "amber" }
+        : { label: "Работает", tone: "green" };
+
+  return (
+    <Card className="key-card">
+      <div className="key-card__head">
+        <div className="key-card__title">
+          <h2>Парсер AnimeGO</h2>
+          <p>Главная страница: лента новых серий и расписание</p>
+        </div>
+        <Badge tone={badge.tone}>{badge.label}</Badge>
+      </div>
+
+      {checked ? (
+        <dl className="key-card__facts">
+          <div>
+            <dt>Успешная загрузка</dt>
+            <dd>{formatAgo(health.last_success_at)}</dd>
+          </div>
+          <div>
+            <dt>В ленте</dt>
+            <dd>{formatNumber(health.updates_count)}</dd>
+          </div>
+          <div>
+            <dt>В расписании</dt>
+            <dd>
+              {formatNumber(health.schedule_count)} (со временем {formatNumber(health.timed_schedule_count)})
+            </dd>
+          </div>
+          <div>
+            <dt>Пояс прокси</dt>
+            <dd>{health.timezone || "—"}</dd>
+          </div>
+        </dl>
+      ) : (
+        <p className="muted-copy">Данные появятся после первой проверки обновлений (раз в 20 минут).</p>
+      )}
+
+      {health.problems.length ? (
+        <p className="key-card__error">
+          <span>
+            {failing
+              ? `Проблема в ${health.consecutive_failures} ${plural(health.consecutive_failures, "загрузке", "загрузках", "загрузках")} подряд · админам пишем после ${health.failure_threshold}`
+              : "Время с последней загрузки не использовано · админам уже написали"}
+          </span>
+          {health.problems.join(". ")}
+        </p>
+      ) : null}
+    </Card>
   );
 }
 

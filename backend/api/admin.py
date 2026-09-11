@@ -9,7 +9,7 @@ import config
 from api.miniapp import validate_init_data
 from database import requests as db
 from loader import bot
-from services import checker, scraper_keys
+from services import checker, health, scraper_keys
 
 router = APIRouter(prefix="/api/miniapp/admin", tags=["miniapp-admin"])
 
@@ -101,6 +101,7 @@ async def _overview() -> dict:
             "days_left": round(remaining / avg_daily, 1) if avg_daily else None,
         },
         "subscriptions_check_running": checker.is_subscriptions_check_running(),
+        "parser_health": health.snapshot(),
     }
 
 

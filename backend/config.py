@@ -22,6 +22,8 @@ try:
     ANIMEGO_DIRECT_ENABLED = os.getenv("ANIMEGO_DIRECT_ENABLED", "false").lower() in ("1", "true", "yes", "on")
     ANIMEGO_DIRECT_TIMEOUT_SECONDS = float(os.getenv("ANIMEGO_DIRECT_TIMEOUT_SECONDS", "1.5"))
     ANIMEGO_CACHE_TTL_SECONDS = int(os.getenv("ANIMEGO_CACHE_TTL_SECONDS", "300"))
+    # ScraperAPI рекомендует ждать ответа не меньше 60–70 секунд
+    SCRAPER_API_TIMEOUT_SECONDS = float(os.getenv("SCRAPER_API_TIMEOUT_SECONDS", "70"))
     MINIAPP_DEV_AUTH_ENABLED = os.getenv("MINIAPP_DEV_AUTH_ENABLED", "false").lower() in ("1", "true", "yes", "on")
 
     # Шифрует ключи ScraperAPI в БД. Если его поменять, сохранённые ключи перестанут расшифровываться

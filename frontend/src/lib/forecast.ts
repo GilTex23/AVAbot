@@ -24,9 +24,11 @@ export function formatForecastWindow(forecast: NextEpisodeForecast) {
   const latest = new Date(forecast.latest_at);
   const expected = new Date(forecast.expected_at);
 
+  if (latest.getTime() - earliest.getTime() <= 3 * HOUR) {
+    return `${formatDay(expected)}, около ${formatTime(expected)}`;
+  }
   if (sameDay(earliest, latest)) {
-    const day = formatDay(expected);
-    return latest.getTime() - earliest.getTime() <= 3 * HOUR ? `${day}, около ${formatTime(expected)}` : day;
+    return formatDay(expected);
   }
   if (earliest.getFullYear() === latest.getFullYear() && earliest.getMonth() === latest.getMonth()) {
     return `${earliest.getDate()}–${formatShortDay(latest)}`;

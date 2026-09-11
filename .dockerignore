@@ -9,3 +9,6 @@ logs/*
 .vs
 frontend/node_modules
 frontend/dist
+backend/tests
+backend/pytest.ini
+backend/requirements-dev.txt

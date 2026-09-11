@@ -1,11 +1,12 @@
 from aiogram import Bot
-from services import forecast, parser
+from services import forecast, health, parser
 from services.notifier import notify_admins
 from utils.antispam import AntiSpamNotify
 from database import requests as db
 import asyncio
 import html
 import logging
+from collections import defaultdict
 from datetime import datetime, timedelta, time as dt_time
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
@@ -17,6 +18,8 @@ antispam_updates = AntiSpamNotify(logger)
 STALE_SUBSCRIPTION_DAYS = 30
 # Страницу тайтла с неизвестным числом серий смотрим не чаще этого срока: «?» обычно держится до конца показа
 INFO_RECHECK_DAYS = 7
+# Серии из истории за это окно ещё досылаются: оно перекрывает тихие часы и перебои с загрузкой главной
+NOTIFY_LOOKBACK = timedelta(hours=48)
 
 _status_check_lock = asyncio.Lock()
 
@@ -94,75 +97,70 @@ def _stale_text(sub) -> str:
     )
 
 
+async def _notify_subscription(bot: Bot, sub, releases: list):
+    """Уведомляет о сериях, вышедших в озвучке подписки после её последней серии"""
+    own = [release for release in releases if forecast.voiceover_matches(sub.voiceover, release.studio)]
+    old_ep_num = extract_episode_number(sub.last_episode)
+    fresh_episodes = sorted({release.episode for release in own if release.episode > old_ep_num})
+    if not fresh_episodes:
+        return
+
+    if _is_quiet_now(sub.user):
+        # Не теряем: серии лежат в истории и уйдут первой проверкой после тихих часов
+        logger.info(f"Deferred quiet-hours notification for {sub.user_id}: {sub.anime_title} ep {fresh_episodes}")
+        return
+
+    new_ep_num = fresh_episodes[-1]
+    studio = min((release for release in own if release.episode == new_ep_num), key=lambda release: release.released_at).studio
+    total_str = sub.total_episodes if sub.total_episodes else "?"
+    episodes_title = "Серии" if len(fresh_episodes) > 1 else "Серия"
+
+    try:
+        await bot.send_message(
+            chat_id=sub.user_id,
+            text=(
+                f"🔥 <b>Новая серия!</b>\n\n"
+                f"📺 <b>{html.escape(sub.anime_title)}</b>\n"
+                f"🎬 <b>{episodes_title}:</b> {_episodes_label(fresh_episodes)} из {total_str}\n"
+                f"🎙 <b>Озвучка:</b> {html.escape(studio)}\n\n"
+                f"🔗 <a href='{sub.anime_url}'>Смотреть</a>"
+            ),
+            parse_mode="HTML"
+        )
+        logger.info(f"Sent update to {sub.user_id}: {sub.anime_title} ep {new_ep_num}")
+
+        # Последняя серия — одним номером, чтобы "Серии 1, 7-8" не сравнивались по первой
+        await db.update_sub_last_episode(sub.id, f"Серия {new_ep_num}")
+    except Exception as e:
+        logger.error(f"Failed to send to {sub.user_id}: {e}")
+        return
+
+    if sub.total_episodes and new_ep_num >= sub.total_episodes:
+        await finish_subscription(bot, sub, _completed_text(sub))
+        logger.info(f"Anime finished and removed: {sub.anime_title}")
+
+
 async def check_updates(bot: Bot):
     try:
         logger.debug("Starting anime check cycle...")
 
         home = await parser.get_home(bot)
+        await health.record_home_result(bot, home)
         if not home: return
 
         subscriptions = await db.get_all_subscriptions()
 
-        # История для прогноза следующей серии; сбой здесь не должен мешать уведомлениям
-        try:
-            await forecast.record_home(home, subscriptions)
-        except Exception as e:
-            logger.error(f"Failed to record episode history: {e}")
+        # Лента хранит ~20 последних серий (около полусуток), поэтому всё увиденное пишем в историю:
+        # из неё строятся уведомления и прогнозы
+        await forecast.record_home(home, subscriptions)
+        if not subscriptions: return
 
-        updates = home['updates']
-        if not updates or not subscriptions: return
+        releases_by_url = defaultdict(list)
+        for release in await db.get_recent_releases(datetime.utcnow() - NOTIFY_LOOKBACK):
+            releases_by_url[release.anime_url].append(release)
 
         for sub in subscriptions:
-            for update in updates:
-                # Сравниваем URL
-                if sub.anime_url == update['link']:
-
-                    # Проверка озвучки
-                    user_vo = sub.voiceover
-
-                    studio_clean = update['studio'].strip().lower()
-                    vo_clean = user_vo.strip().lower()
-
-                    if user_vo == "Все" or vo_clean in studio_clean:
-                        if _is_quiet_now(sub.user):
-                            logger.info(f"Skipped quiet-hours notification for {sub.user_id}")
-                            continue
-
-                        # Числовое сравнение серий; выпуск может содержать несколько серий: "Серии 1, 7-8"
-                        old_ep_num = extract_episode_number(sub.last_episode)
-                        new_ep_num = int(extract_episode_number(update['episode']))
-
-                        if new_ep_num > old_ep_num:
-                            total_str = sub.total_episodes if sub.total_episodes else "?"
-                            fresh_episodes = [ep for ep in parser.parse_episode_list(update['episode']) if ep > old_ep_num] or [new_ep_num]
-                            episodes_title = "Серии" if len(fresh_episodes) > 1 else "Серия"
-
-                            try:
-                                await bot.send_message(
-                                    chat_id=sub.user_id,
-                                    text=(
-                                        f"🔥 <b>Новая серия!</b>\n\n"
-                                        f"📺 <b>{update['title']}</b>\n"
-                                        f"🎬 <b>{episodes_title}:</b> {_episodes_label(fresh_episodes)} из {total_str}\n"
-                                        f"🎙 <b>Озвучка:</b> {update['studio']}\n\n"
-                                        f"🔗 <a href='{update['link']}'>Смотреть</a>"
-                                    ),
-                                    parse_mode="HTML"
-                                )
-                                logger.info(f"Sent update to {sub.user_id}: {update['title']} ep {new_ep_num}")
-
-                                # Обновляем последнюю серию (одним номером, чтобы "Серии 1, 7-8" не сравнивались по первой)
-                                await db.update_sub_last_episode(sub.id, f"Серия {new_ep_num}")
-
-                            except Exception as e:
-                                logger.error(f"Failed to send to {sub.user_id}: {e}")
-                                continue
-
-                            # Проверяем, не последняя ли это серия
-                            if sub.total_episodes and new_ep_num >= sub.total_episodes:
-                                await finish_subscription(bot, sub, _completed_text(sub))
-                                logger.info(f"Anime finished and removed: {sub.anime_title}")
-                                break
+            await _notify_subscription(bot, sub, releases_by_url.get(sub.anime_url, []))
     except Exception as e:
         antispam_updates.failed_requests += 1
         logger.error(f"Checker updates error: {e}")

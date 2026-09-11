@@ -5,11 +5,12 @@ import { Button } from "../components/ui/button";
 import { Card } from "../components/ui/card";
 import { Input } from "../components/ui/input";
 import { LazyImage } from "../components/ui/LazyImage";
-import { addScheduleSubscription, getAnimeDetails, getSchedule, getSubscriptions } from "../services/api";
+import { addScheduleSubscription, errorText, getAnimeDetails, getSchedule, getSubscriptions } from "../services/api";
 import type { AnimeDetails, ScheduleDay, ScheduleItem, SubscriptionItem } from "../lib/types";
 import { buildSubscriptionIndex, normalizeAnimeLink, subscriptionKey } from "../lib/subscriptions";
 import { hapticNotification } from "../lib/telegram";
 import { openAnime } from "../lib/utils";
+import { MyWeek } from "./MyWeek";
 
 type ScheduleProps = {
   refreshKey: number;
@@ -20,7 +21,35 @@ type VoiceoverModal = {
   details: AnimeDetails;
 };
 
+type ScheduleMode = "all" | "mine";
+
 export function Schedule({ refreshKey }: ScheduleProps) {
+  const [mode, setMode] = useState<ScheduleMode>("all");
+
+  return (
+    <div className="page-stack">
+      <section className="section-title">
+        <div>
+          <h1>Расписание</h1>
+          <p>{mode === "all" ? "Все дни недели с поиском по тайтлам" : "Прогноз серий по вашим подпискам на 7 дней"}</p>
+        </div>
+      </section>
+
+      <div className="chip-row" role="tablist" aria-label="Режим расписания">
+        <button type="button" role="tab" aria-selected={mode === "all"} className={mode === "all" ? "chip chip--active" : "chip"} onClick={() => setMode("all")}>
+          Все тайтлы
+        </button>
+        <button type="button" role="tab" aria-selected={mode === "mine"} className={mode === "mine" ? "chip chip--active" : "chip"} onClick={() => setMode("mine")}>
+          Мои серии
+        </button>
+      </div>
+
+      {mode === "all" ? <FullSchedule refreshKey={refreshKey} /> : <MyWeek refreshKey={refreshKey} />}
+    </div>
+  );
+}
+
+function FullSchedule({ refreshKey }: ScheduleProps) {
   const [days, setDays] = useState<ScheduleDay[]>([]);
   const [subscriptions, setSubscriptions] = useState<SubscriptionItem[]>([]);
   const [query, setQuery] = useState("");
@@ -75,11 +104,7 @@ export function Schedule({ refreshKey }: ScheduleProps) {
     setNotice(null);
     try {
       const details = await getAnimeDetails(item.link);
-      if (details.status?.toLowerCase().includes("вышел")) {
-        hapticNotification("warning");
-        setNotice("Этот тайтл уже полностью вышел, подписка не нужна.");
-        return;
-      }
+      // Вышедший тайтл не отсекаем: озвучка может отставать — решает сервер при подписке
       if (details.type?.toLowerCase().includes("фильм")) {
         hapticNotification("warning");
         setNotice("На фильмы подписка не оформляется, новых серий у них не будет.");
@@ -125,23 +150,16 @@ export function Schedule({ refreshKey }: ScheduleProps) {
       hapticNotification(result.created ? "success" : "warning");
       setNotice(result.created ? "Подписка добавлена." : "Такая подписка уже есть.");
       setModal(null);
-    } catch {
+    } catch (error) {
       hapticNotification("error");
-      setNotice("Не удалось оформить подписку. Попробуйте ещё раз.");
+      setNotice(errorText(error, "Не удалось оформить подписку. Попробуйте ещё раз."));
     } finally {
       setPendingVoiceover(null);
     }
   }
 
   return (
-    <div className="page-stack">
-      <section className="section-title">
-        <div>
-          <h1>Расписание</h1>
-          <p>Все дни недели с поиском по тайтлам</p>
-        </div>
-      </section>
-
+    <>
       {notice ? <div className="notice">{notice}</div> : null}
 
       <label className="search-field">
@@ -236,6 +254,6 @@ export function Schedule({ refreshKey }: ScheduleProps) {
           </section>
         </div>
       ) : null}
-    </div>
+    </>
   );
 }

@@ -12,6 +12,7 @@ import config
 from database import requests as db
 from loader import bot
 from services import forecast, parser
+from services.subscription_rules import subscription_block_reason
 
 logger = logging.getLogger(__name__)
 
@@ -134,6 +135,21 @@ async def get_subscriptions(current_user: dict = Depends(get_miniapp_user)):
     return {"items": [_serialize_subscription(sub, forecasts.get(sub.id)) for sub in subscriptions]}
 
 
+@router.get("/my-week")
+async def get_my_week(current_user: dict = Depends(get_miniapp_user)):
+    """Серии по подпискам, которые ожидаются в ближайшие 7 дней, и задерживающиеся — по прогнозу"""
+    await sync_miniapp_user(current_user)
+    subscriptions = await db.get_user_subscriptions(int(current_user["id"]))
+    by_id = {sub.id: sub for sub in subscriptions}
+    week = await forecast.build_week(subscriptions)
+    return {
+        "items": [
+            {**_serialize_subscription(by_id[item["subscription_id"]]), "forecast": item["forecast"]}
+            for item in week
+        ]
+    }
+
+
 @router.post("/subscriptions")
 async def add_subscription(payload: dict, current_user: dict = Depends(get_miniapp_user)):
     await sync_miniapp_user(current_user)
@@ -145,8 +161,13 @@ async def add_subscription(payload: dict, current_user: dict = Depends(get_minia
     if not title or not link or not voiceover:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Title, link and voiceover are required")
 
+    # Страница тайтла обычно уже в кэше: её только что открывали, чтобы выбрать озвучку или показать обновления
+    info = await parser.get_anime_info(link, bot)
+    reason = subscription_block_reason(info, episode)
+    if reason:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=reason)
+
     payload_total = payload.get("total_episodes")
-    info = await parser.get_anime_info(link, bot) if payload_total is None else None
     total_episodes = payload_total if payload_total is not None else (info.get("total_episodes") if info else None)
     created = await db.add_subscription(
         int(current_user["id"]),

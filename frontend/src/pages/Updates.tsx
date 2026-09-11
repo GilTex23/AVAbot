@@ -4,7 +4,7 @@ import { Badge } from "../components/ui/badge";
 import { Button } from "../components/ui/button";
 import { Card } from "../components/ui/card";
 import { LazyImage } from "../components/ui/LazyImage";
-import { addSubscription, getSubscriptions, getUpdates } from "../services/api";
+import { addSubscription, errorText, getSubscriptions, getUpdates } from "../services/api";
 import type { SubscriptionItem, UpdateItem } from "../lib/types";
 import { buildSubscriptionIndex, subscriptionKey } from "../lib/subscriptions";
 import { hapticNotification } from "../lib/telegram";
@@ -73,9 +73,9 @@ export function Updates({ favoriteVoiceover, refreshKey }: UpdatesProps) {
       }
       hapticNotification(result.created ? "success" : "warning");
       setNotice(result.created ? "Подписка добавлена." : "Такая подписка уже есть.");
-    } catch {
+    } catch (error) {
       hapticNotification("error");
-      setNotice("Не удалось оформить подписку. Попробуйте ещё раз.");
+      setNotice(errorText(error, "Не удалось оформить подписку. Попробуйте ещё раз."));
     } finally {
       setPendingLink(null);
     }

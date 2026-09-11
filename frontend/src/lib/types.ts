@@ -47,6 +47,11 @@ export type SubscriptionItem = {
   next_episode?: NextEpisodeForecast | null;
 };
 
+/** Серия из «Моих серий на неделе»: подписка + прогноз конкретной серии */
+export type WeekItem = SubscriptionItem & {
+  forecast: NextEpisodeForecast;
+};
+
 export type ScheduleItem = {
   title: string;
   link: string;
@@ -115,6 +120,19 @@ export type ScraperKeysOverview = {
     days_left: number | null;
   };
   subscriptions_check_running: boolean;
+  parser_health: ParserHealth;
+};
+
+export type ParserHealth = {
+  last_attempt_at?: string | null;
+  last_success_at?: string | null;
+  updates_count: number;
+  schedule_count: number;
+  timed_schedule_count: number;
+  timezone?: string | null;
+  problems: string[];
+  consecutive_failures: number;
+  failure_threshold: number;
 };
 
 export type NewScraperKey = {

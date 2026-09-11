@@ -34,8 +34,10 @@ def _studio_key(name: str | None) -> str:
     return (name or "").strip().lower()
 
 
-def _matches(voiceover: str, studio: str) -> bool:
-    """То же правило, что в чекере: озвучка подписки входит в название студии из ленты"""
+def voiceover_matches(voiceover: str, studio: str) -> bool:
+    """Подходит ли серия из ленты к озвучке подписки: «Все» — любая, иначе озвучка входит в название студии"""
+    if voiceover == ALL_VOICEOVERS:
+        return True
     voiceover_key, studio_key = _studio_key(voiceover), _studio_key(studio)
     return bool(voiceover_key) and (voiceover_key == studio_key or voiceover_key in studio_key)
 
@@ -147,13 +149,16 @@ def _result(episode, expected, earliest, latest, air_at, air_estimated, basis, l
     }
 
 
-def forecast_subscription(sub, url_releases: list, airings: dict, studio_lags: dict, now: datetime.datetime) -> dict | None:
-    target = int(max_episode_number(sub.last_episode)) + 1
+def forecast_subscription(
+    sub, url_releases: list, airings: dict, studio_lags: dict, now: datetime.datetime, episode: int | None = None,
+) -> dict | None:
+    """Прогноз для серии episode (по умолчанию — следующей после последней вышедшей в подписке)"""
+    target = episode or int(max_episode_number(sub.last_episode)) + 1
     if sub.total_episodes and target > sub.total_episodes:
         return None
 
     is_all = sub.voiceover == ALL_VOICEOVERS
-    own = [release for release in url_releases if is_all or _matches(sub.voiceover, release.studio)]
+    own = [release for release in url_releases if voiceover_matches(sub.voiceover, release.studio)]
     if any(release.episode >= target for release in own):
         return None  # серия уже вышла — уведомление придёт при следующей проверке
 
@@ -175,7 +180,7 @@ def forecast_subscription(sub, url_releases: list, airings: dict, studio_lags: d
                 air_at, air_estimated, "title", title_lags, now,
             )
 
-        studio_samples = [lag for studio, lags in studio_lags.items() if _matches(sub.voiceover, studio) for lag in lags]
+        studio_samples = [lag for studio, lags in studio_lags.items() if voiceover_matches(sub.voiceover, studio) for lag in lags]
         if len(studio_samples) >= MIN_STUDIO_SAMPLES:
             # По чужим тайтлам разброс больше, поэтому берём середину распределения, а не крайние значения
             return _result(
@@ -195,11 +200,7 @@ def forecast_subscription(sub, url_releases: list, airings: dict, studio_lags: d
     return None
 
 
-async def build_forecasts(subscriptions) -> dict[int, dict | None]:
-    if not subscriptions:
-        return {}
-
-    now = datetime.datetime.utcnow()
+async def _load_history(subscriptions, now: datetime.datetime):
     urls = {sub.anime_url for sub in subscriptions}
 
     releases_by_url = defaultdict(list)
@@ -212,8 +213,45 @@ async def build_forecasts(subscriptions) -> dict[int, dict | None]:
         lag = _lag(released_at, air_at)
         if lag is not None:
             studio_lags[_studio_key(studio)].append(lag)
+    return releases_by_url, airings, studio_lags
 
+
+async def build_forecasts(subscriptions) -> dict[int, dict | None]:
+    if not subscriptions:
+        return {}
+
+    now = datetime.datetime.utcnow()
+    releases_by_url, airings, studio_lags = await _load_history(subscriptions, now)
     return {
         sub.id: forecast_subscription(sub, releases_by_url[sub.anime_url], airings, studio_lags, now)
         for sub in subscriptions
     }
+
+
+WEEK_EPISODES_PER_SUBSCRIPTION = 3
+
+
+async def build_week(subscriptions, days: int = 7) -> list[dict]:
+    """
+    Серии по подпискам, которые ожидаются в ближайшие days дней (и задерживающиеся), по времени.
+    У отстающей озвучки за неделю может выйти несколько серий — прогнозируем до трёх подряд.
+    """
+    if not subscriptions:
+        return []
+
+    now = datetime.datetime.utcnow()
+    horizon = now + datetime.timedelta(days=days)
+    releases_by_url, airings, studio_lags = await _load_history(subscriptions, now)
+
+    items = []
+    for sub in subscriptions:
+        first = int(max_episode_number(sub.last_episode)) + 1
+        for episode in range(first, first + WEEK_EPISODES_PER_SUBSCRIPTION):
+            prediction = forecast_subscription(sub, releases_by_url[sub.anime_url], airings, studio_lags, now, episode)
+            if prediction is None or datetime.datetime.fromisoformat(prediction["expected_at"].rstrip("Z")) > horizon:
+                break
+            items.append({"subscription_id": sub.id, "forecast": prediction})
+            if prediction["overdue"]:
+                break  # следующие серии этой озвучки тоже поедут, пока не выйдет текущая
+
+    return sorted(items, key=lambda item: item["forecast"]["expected_at"])

@@ -12,6 +12,7 @@ import config
 from aiogram import Bot
 from services.notifier import notify_admins
 from services.scraper_keys import key_pool, STATUS_EXHAUSTED, STATUS_INVALID
+from services import timezone_alerts
 from services.timezone_labels import TIMEZONE_LABELS
 from utils.antispam import AntiSpamNotify
 
@@ -155,7 +156,9 @@ async def get_html(url: str, session: aiohttp.ClientSession = None, bot: Bot=Non
                 'country_code': 'ru'
             }
             try:
-                async with session.get(SCRAPER_API_URL, params=params, timeout=aiohttp.ClientTimeout(total=30)) as response:
+                # ScraperAPI сам повторяет запрос к сайту до ~60 с, поэтому короткий таймаут обрывает удачные запросы
+                timeout = aiohttp.ClientTimeout(total=getattr(config, "SCRAPER_API_TIMEOUT_SECONDS", 70))
+                async with session.get(SCRAPER_API_URL, params=params, timeout=timeout) as response:
                     logger.info(f"ScraperAPI request to {url} - Status: {response.status} - Used API name: {key.name}")
                     if response.status == 200:
                         html_text = await response.text()
@@ -233,15 +236,15 @@ def _utc_naive_to(value: datetime.datetime, zone) -> datetime.datetime:
     return value.replace(tzinfo=datetime.timezone.utc).astimezone(zone)
 
 
-def _page_zone(soup) -> ZoneInfo | None:
-    """Часовой пояс страницы по подписям времени в расписании; None — если пояс не удалось определить однозначно"""
+def _page_timezone(soup) -> tuple[str | None, ZoneInfo | None]:
+    """Подпись часового пояса страницы («Армения») и сам пояс; пояс None — если его не удалось определить однозначно"""
     labels = Counter(
         match.group(1).strip()
         for tag in soup.find_all(class_='aw-meta__episode-time')
         if (match := _TZ_LABEL_RE.search(tag.get_text(strip=True)))
     )
     if not labels:
-        return None
+        return None, None
 
     label = labels.most_common(1)[0][0]
     zone_name = TIMEZONE_LABELS.get(label)
@@ -249,8 +252,12 @@ def _page_zone(soup) -> ZoneInfo | None:
         if label not in _unknown_timezone_labels:
             _unknown_timezone_labels.add(label)
             logger.warning(f"Unknown AnimeGO timezone label '{label}': times from such pages are not used")
-        return None
-    return ZoneInfo(zone_name)
+        return label, None
+    return label, ZoneInfo(zone_name)
+
+
+def _page_zone(soup) -> ZoneInfo | None:
+    return _page_timezone(soup)[1]
 
 
 def _parse_day(text: str, now: datetime.datetime) -> datetime.date | None:
@@ -479,19 +486,52 @@ async def _get_home_soup(bot: Bot):
         html_text = await get_html(URL_MAIN, session, bot)
     if html_text is None:
         return None
-    return bs(html_text, 'html.parser')
+    soup = bs(html_text, 'html.parser')
+
+    label, zone = _page_timezone(soup)
+    if label and zone is None:
+        await _report_unknown_timezone(bot, label, soup, html_text)
+    return soup
+
+
+async def _report_unknown_timezone(bot: Bot, label: str, soup, html_text: str):
+    """Готовит для админов примеры со страницы и время серий, прочитанное как UTC, — по нему угадывается смещение"""
+    try:
+        examples = []
+        time_tag = soup.find(class_='aw-meta__episode-time')
+        if time_tag:
+            examples.append(time_tag.get_text(" ", strip=True))
+        feed_meta = next((meta for meta in soup.find_all(class_='aw-meta') if '·' in meta.get_text()), None)
+        if feed_meta and '—' in feed_meta.get_text():
+            examples.append(feed_meta.get_text(" ", strip=True).rsplit('—', 1)[1].strip())
+
+        as_utc = _parse_schedule(soup, _now_utc(), datetime.timezone.utc)
+        page_airings = [
+            (item['link'], episode, item['air_at'])
+            for day in as_utc for item in day['items'] if item['air_at']
+            for episode in item['episodes']
+        ]
+        await timezone_alerts.report_unknown_timezone(bot, label, html_text, examples, page_airings)
+    except Exception as e:
+        logger.error(f"Failed to report unknown timezone label '{label}': {e}")
 
 
 async def get_home(bot: Bot):
     """
     Лента свежих серий и расписание с одного запроса главной страницы:
-    {'updates': [...], 'schedule': [...]} или None при ошибке сети.
+    {'updates': [...], 'schedule': [...], 'timezone': 'Москва', 'timezone_known': True} или None при ошибке сети.
     """
     soup = await _get_home_soup(bot)
     if soup is None:
         return None
-    now, zone = _now_utc(), _page_zone(soup)
-    return {'updates': _parse_updates(soup, now, zone), 'schedule': _parse_schedule(soup, now, zone)}
+    now = _now_utc()
+    label, zone = _page_timezone(soup)
+    return {
+        'updates': _parse_updates(soup, now, zone),
+        'schedule': _parse_schedule(soup, now, zone),
+        'timezone': label,
+        'timezone_known': zone is not None,
+    }
 
 
 async def get_updates(bot: Bot):

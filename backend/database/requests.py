@@ -223,6 +223,13 @@ async def get_episode_releases(urls: set[str]):
         return result.scalars().all()
 
 
+async def get_recent_releases(since: datetime.datetime):
+    """Серии, которые бот видел в ленте начиная с since — из них досылаются уведомления"""
+    async with async_session() as session:
+        result = await session.execute(select(EpisodeRelease).where(EpisodeRelease.first_seen_at >= since))
+        return result.scalars().all()
+
+
 async def get_episode_airings(urls: set[str]):
     async with async_session() as session:
         result = await session.execute(select(EpisodeAiring).where(EpisodeAiring.anime_url.in_(urls)))

@@ -7,6 +7,7 @@ from contextlib import suppress
 from database import requests as db
 from keyboards import inline
 from services import parser
+from services.subscription_rules import subscription_block_reason
 from utils.states import UpdatesState, ScheduleState
 import logging
 
@@ -197,20 +198,12 @@ async def cb_add_from_list(callback: types.CallbackQuery, state: FSMContext):
         await callback.answer("⚠️ Не удалось получить информацию об аниме. Попробуйте позже.", cache_time=10)
         return
 
-    # 2. Проверка ограничений
-    if info.get('status') and "Вышел" in info['status']:
+    # 2. Проверка ограничений (то же правило, что в мини-аппе)
+    reason = subscription_block_reason(info, anime['episode'])
+    if reason:
         await msg.edit_text(
             f"⛔️ Нельзя добавить <b>{anime['title']}</b>.\n"
-            f"<b>Причина:</b> Аниме уже полностью вышло.",
-            parse_mode="HTML"
-        )
-        await callback.answer("⛔️ Нельзя добавить", cache_time=5)
-        return
-
-    if info.get('type') and "Фильм" in info['type']:
-        await msg.edit_text(
-            f"⛔️ Нельзя добавить <b>{anime['title']}</b>.\n"
-            f"<b>Причина:</b> Это фильм (обновлений не будет).",
+            f"<b>Причина:</b> {reason}",
             parse_mode="HTML"
         )
         await callback.answer("⛔️ Нельзя добавить", cache_time=5)
@@ -340,16 +333,11 @@ async def cb_schedule_item_select(callback: types.CallbackQuery, state: FSMConte
         await msg.edit_text("❌ Ошибка получения данных")
         return
 
-    # 2. Проверки
-    if info.get('status') and "Вышел" in info['status']:
+    # 2. Проверки (то же правило, что в мини-аппе; из расписания подписка начинается с серии 0)
+    reason = subscription_block_reason(info, "Серия 0")
+    if reason:
         await msg.edit_text(
-            f"⛔️ Нельзя добавить <b>{anime['title']}</b>.\nПричина: Аниме завершено.",
-            parse_mode="HTML"
-        )
-        return
-    if info.get('type') and "Фильм" in info['type']:
-        await msg.edit_text(
-            f"⛔️ Нельзя добавить <b>{anime['title']}</b>.\nПричина: Это фильм.",
+            f"⛔️ Нельзя добавить <b>{anime['title']}</b>.\nПричина: {reason}",
             parse_mode="HTML"
         )
         return
