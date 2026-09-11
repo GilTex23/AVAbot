@@ -1,5 +1,7 @@
 import datetime
 import re
+from collections import Counter
+from zoneinfo import ZoneInfo
 import aiohttp
 from bs4 import BeautifulSoup as bs
 import logging
@@ -10,6 +12,7 @@ import config
 from aiogram import Bot
 from services.notifier import notify_admins
 from services.scraper_keys import key_pool, STATUS_EXHAUSTED, STATUS_INVALID
+from services.timezone_labels import TIMEZONE_LABELS
 from utils.antispam import AntiSpamNotify
 
 
@@ -203,8 +206,10 @@ async def get_html(url: str, session: aiohttp.ClientSession = None, bot: Bot=Non
             await session.close()
 
 
-# AnimeGO показывает время по Москве (UTC+3, без перехода на летнее время)
-MSK = datetime.timezone(datetime.timedelta(hours=3))
+# AnimeGO показывает время в часовом поясе IP, с которого пришёл запрос, и подписывает его: «16:00 (Армения)».
+# Прокси ScraperAPI каждый раз разные, поэтому пояс определяется по подписи на каждой странице,
+# а в расписании время приводится к московскому.
+MSK = ZoneInfo("Europe/Moscow")
 
 MONTHS_GENITIVE = {
     'января': 1, 'февраля': 2, 'марта': 3, 'апреля': 4, 'мая': 5, 'июня': 6,
@@ -212,14 +217,40 @@ MONTHS_GENITIVE = {
 }
 _TIME_RE = re.compile(r'(\d{1,2}):(\d{2})')
 _DAY_MONTH_RE = re.compile(r'(\d{1,2})\s+([а-яё]+)(?:\s+(\d{4}))?', re.IGNORECASE)
+_TZ_LABEL_RE = re.compile(r'\(([^()]+)\)\s*$')
+_unknown_timezone_labels: set[str] = set()
 
 
-def _now_msk() -> datetime.datetime:
-    return datetime.datetime.now(MSK)
+def _now_utc() -> datetime.datetime:
+    return datetime.datetime.now(datetime.timezone.utc)
 
 
 def _to_utc_naive(value: datetime.datetime) -> datetime.datetime:
     return value.astimezone(datetime.timezone.utc).replace(tzinfo=None)
+
+
+def _utc_naive_to(value: datetime.datetime, zone) -> datetime.datetime:
+    return value.replace(tzinfo=datetime.timezone.utc).astimezone(zone)
+
+
+def _page_zone(soup) -> ZoneInfo | None:
+    """Часовой пояс страницы по подписям времени в расписании; None — если пояс не удалось определить однозначно"""
+    labels = Counter(
+        match.group(1).strip()
+        for tag in soup.find_all(class_='aw-meta__episode-time')
+        if (match := _TZ_LABEL_RE.search(tag.get_text(strip=True)))
+    )
+    if not labels:
+        return None
+
+    label = labels.most_common(1)[0][0]
+    zone_name = TIMEZONE_LABELS.get(label)
+    if zone_name is None:
+        if label not in _unknown_timezone_labels:
+            _unknown_timezone_labels.add(label)
+            logger.warning(f"Unknown AnimeGO timezone label '{label}': times from such pages are not used")
+        return None
+    return ZoneInfo(zone_name)
 
 
 def _parse_day(text: str, now: datetime.datetime) -> datetime.date | None:
@@ -248,13 +279,15 @@ def _parse_day(text: str, now: datetime.datetime) -> datetime.date | None:
     return min(candidates, key=lambda candidate: abs(candidate - now.date())) if candidates else None
 
 
-def _parse_msk_datetime(day_text: str, time_text: str, now: datetime.datetime) -> datetime.datetime | None:
-    """Дата и время AnimeGO (по Москве) -> naive UTC"""
-    day = _parse_day(day_text, now)
+def _parse_local_datetime(day_text: str, time_text: str, zone, now: datetime.datetime) -> datetime.datetime | None:
+    """Дата и время AnimeGO в поясе страницы -> naive UTC; без известного пояса — None"""
+    if zone is None:
+        return None
+    day = _parse_day(day_text, now.astimezone(zone))
     time_match = _TIME_RE.search(time_text)
     if day is None or not time_match:
         return None
-    local = datetime.datetime.combine(day, datetime.time(int(time_match.group(1)), int(time_match.group(2))), tzinfo=MSK)
+    local = datetime.datetime.combine(day, datetime.time(int(time_match.group(1)), int(time_match.group(2))), tzinfo=zone)
     return _to_utc_naive(local)
 
 
@@ -286,7 +319,7 @@ def max_episode_number(text: str | None) -> float:
     return float(match.group(0)) if match else 0.0
 
 
-def _parse_updates(soup, now: datetime.datetime) -> list:
+def _parse_updates(soup, now: datetime.datetime, zone) -> list:
     fresh_updates = []
 
     for item in soup.find_all(class_='aw-item'):
@@ -308,13 +341,13 @@ def _parse_updates(soup, now: datetime.datetime) -> list:
                 parts = meta_text.split('·')
                 episode_num = parts[0].strip()
 
-                # "AniLiberty — Сегодня, 11:10"
+                # "AniLiberty — Сегодня, 11:10" (время в поясе страницы)
                 rest_part = parts[1]
                 released_at = None
                 if '—' in rest_part:
                     studio, _, released_text = rest_part.partition('—')
                     studio = studio.strip()
-                    released_at = _parse_msk_datetime(released_text, released_text, now)
+                    released_at = _parse_local_datetime(released_text, released_text, zone, now)
                 else:
                     studio = rest_part.strip()
 
@@ -334,7 +367,7 @@ def _parse_updates(soup, now: datetime.datetime) -> list:
     return fresh_updates
 
 
-def _parse_schedule(soup, now: datetime.datetime) -> list:
+def _parse_schedule(soup, now: datetime.datetime, zone) -> list:
     schedule_widget = next(
         (widget for widget in soup.find_all(class_='anime-widget') if widget.find(class_='aw-day')), None
     )
@@ -342,6 +375,7 @@ def _parse_schedule(soup, now: datetime.datetime) -> list:
         return []
 
     schedule_days = []
+    day_dates = []
 
     for day_block in schedule_widget.find_all(class_='aw-day'):
         try:
@@ -375,6 +409,10 @@ def _parse_schedule(soup, now: datetime.datetime) -> list:
                 total_tag = anime.find(class_='aw-meta__episode-total')
                 totals = parse_episode_list(total_tag.get_text(strip=True)) if total_tag else []
 
+                air_at = _parse_local_datetime(day_text, time_str, zone, now) if day_text and time_str else None
+                if air_at is not None:
+                    time_str = f"{_utc_naive_to(air_at, MSK):%H:%M} (Москва)"
+
                 items.append({
                     'title': title,
                     'link': link,
@@ -382,7 +420,7 @@ def _parse_schedule(soup, now: datetime.datetime) -> list:
                     'poster_url': poster_url,
                     'episodes': parse_episode_list(meta_text.split('—')[0].split('(')[0]),
                     'total_episodes': totals[-1] if totals else None,
-                    'air_at': _parse_msk_datetime(day_text, time_str, now) if day_text and time_str else None,
+                    'air_at': air_at,
                 })
 
             if items:
@@ -390,12 +428,50 @@ def _parse_schedule(soup, now: datetime.datetime) -> list:
                     'date_str': full_date_str,
                     'items': items
                 })
+                day_dates.append(_parse_day(day_text, now.astimezone(zone)) if zone and day_text else None)
 
         except Exception as e:
             logger.warning(f"Error parsing schedule day: {e}")
             continue
 
+    if zone is not None:
+        _regroup_by_msk_date(schedule_days, day_dates)
     return schedule_days
+
+
+def _regroup_by_msk_date(schedule_days: list, day_dates: list):
+    """
+    Дни на странице — в поясе прокси: у дальневосточного IP вечерние серии по Москве попадают на следующий день.
+    Переносим такие серии в день по московской дате и сортируем по времени (серии без времени — в конце).
+    Серии, чья московская дата выпала за пределы недели на странице (вчерашний вечер по Москве), убираем:
+    в московском расписании их тоже нет, а в историю они попали с прошлых загрузок.
+    """
+    day_by_date = {day_date: day for day, day_date in zip(schedule_days, day_dates) if day_date is not None}
+    if not day_by_date:
+        return
+    first_date, last_date = min(day_by_date), max(day_by_date)
+
+    moves = []
+    for day in schedule_days:
+        for item in day['items']:
+            if item['air_at'] is None:
+                continue
+            msk_date = _utc_naive_to(item['air_at'], MSK).date()
+            if not first_date <= msk_date <= last_date:
+                moves.append((item, day, None))
+                continue
+            target = day_by_date.get(msk_date)
+            if target is not None and target is not day:
+                moves.append((item, day, target))
+
+    for item, source, target in moves:
+        source['items'] = [other for other in source['items'] if other is not item]
+        if target is not None:
+            target['items'].append(item)
+
+    for day in schedule_days:
+        day['items'].sort(key=lambda item: (item['air_at'] is None, item['air_at'] or datetime.datetime.max))
+    schedule_days[:] = [day for day in schedule_days if day['items']]
 
 
 async def _get_home_soup(bot: Bot):
@@ -414,8 +490,8 @@ async def get_home(bot: Bot):
     soup = await _get_home_soup(bot)
     if soup is None:
         return None
-    now = _now_msk()
-    return {'updates': _parse_updates(soup, now), 'schedule': _parse_schedule(soup, now)}
+    now, zone = _now_utc(), _page_zone(soup)
+    return {'updates': _parse_updates(soup, now, zone), 'schedule': _parse_schedule(soup, now, zone)}
 
 
 async def get_updates(bot: Bot):
@@ -426,7 +502,7 @@ async def get_updates(bot: Bot):
     soup = await _get_home_soup(bot)
     if soup is None:
         return None
-    return _parse_updates(soup, _now_msk())
+    return _parse_updates(soup, _now_utc(), _page_zone(soup))
 
 
 async def get_anime_info(url: str, bot: Bot):
@@ -490,7 +566,7 @@ async def get_schedule(bot: Bot):
     soup = await _get_home_soup(bot)
     if soup is None:
         return None
-    return _parse_schedule(soup, _now_msk())
+    return _parse_schedule(soup, _now_utc(), _page_zone(soup))
 
 
 async def get_anime_details(url: str, bot: Bot):
