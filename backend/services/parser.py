@@ -12,7 +12,7 @@ import config
 from aiogram import Bot
 from services.notifier import notify_admins
 from services.scraper_keys import key_pool, STATUS_EXHAUSTED, STATUS_INVALID
-from services import timezone_alerts
+from services import stats, timezone_alerts
 from services.timezone_labels import TIMEZONE_LABELS
 from utils.antispam import AntiSpamNotify
 
@@ -105,10 +105,27 @@ async def _notify_no_keys(bot: Bot):
         antispam.set_notify_timestamp()
 
 
+async def _record_attempt(dimension: str, outcome: str, started: float, status: str | None = None):
+    """Статистика одной попытки через ScraperAPI: исход по источнику, причина ошибки и время ответа"""
+    rows = [
+        (f"scraper.{outcome}", dimension, 1),
+        ("scraper.latency_ms", "", int((time.monotonic() - started) * 1000)),
+        ("scraper.latency_count", "", 1),
+    ]
+    if status:
+        rows.append(("scraper.failed_status", status, 1))
+    await stats.increment_many(rows)
+
+
 async def get_html(url: str, session: aiohttp.ClientSession = None, bot: Bot=None):
+    # Для статистики: кто попросил страницу (чекер, мини-апп, бот...) и какую — главную или тайтла
+    page_kind = "home" if url.rstrip('/') == URL_MAIN.rstrip('/') else "anime"
+    stats_dimension = f"{stats.request_source.get()}:{page_kind}"
+
     cached_html = _get_cached_html(url)
     if cached_html:
         logger.debug(f"HTML cache hit for {url}")
+        await stats.increment("cache.hit", stats_dimension)
         return cached_html
 
     close_session = False
@@ -155,6 +172,7 @@ async def get_html(url: str, session: aiohttp.ClientSession = None, bot: Bot=Non
                 'device_type': 'desktop',
                 'country_code': 'ru'
             }
+            started = time.monotonic()
             try:
                 # ScraperAPI сам повторяет запрос к сайту до ~60 с, поэтому короткий таймаут обрывает удачные запросы
                 timeout = aiohttp.ClientTimeout(total=getattr(config, "SCRAPER_API_TIMEOUT_SECONDS", 70))
@@ -163,10 +181,12 @@ async def get_html(url: str, session: aiohttp.ClientSession = None, bot: Bot=Non
                     if response.status == 200:
                         html_text = await response.text()
                         await key_pool.report_success(key, bot)
+                        await _record_attempt(stats_dimension, "success", started)
                         _set_cached_html(url, html_text)
                         return html_text
 
                     error_text = f"{response.status}: {(await response.text())[:300]}"
+                await _record_attempt(stats_dimension, "failed", started, str(response.status))
 
                 if response.status == 401:
                     logger.error(f"An unauthorized request. Please make sure that your API key \"{key.name}\" is valid.")
@@ -196,10 +216,12 @@ async def get_html(url: str, session: aiohttp.ClientSession = None, bot: Bot=Non
             except asyncio.TimeoutError:
                 logger.error(f"Timeout error for {url}")
                 await key_pool.report_failure(key, "Timeout", bot)
+                await _record_attempt(stats_dimension, "timeout", started, "timeout")
                 return None
             except Exception as e:
                 logger.error(f"Network error for {url}: {e}")
                 await key_pool.report_failure(key, f"Network error: {e}", bot)
+                await _record_attempt(stats_dimension, "failed", started, "network")
                 return None
 
         logger.critical("Too many attempts.")

@@ -1,5 +1,5 @@
 from aiogram import Bot
-from services import forecast, health, parser
+from services import forecast, health, parser, stats
 from services.notifier import notify_admins
 from utils.antispam import AntiSpamNotify
 from database import requests as db
@@ -21,6 +21,8 @@ INFO_RECHECK_DAYS = 7
 NOTIFY_LOOKBACK = timedelta(hours=48)
 
 _status_check_lock = asyncio.Lock()
+# (подписка, серия), уже учтённые в статистике как отложенные тихими часами
+_deferred_counted: set[tuple[int, int]] = set()
 
 
 def extract_episode_number(ep_str: str) -> float:
@@ -64,8 +66,11 @@ def _is_completed(sub, total_episodes: int | None) -> bool:
     return bool(total_episodes) and extract_episode_number(sub.last_episode) >= total_episodes
 
 
-async def finish_subscription(bot: Bot, sub, text: str):
-    """Сообщает пользователю о снятии подписки и удаляет её (даже если сообщение не доставлено)"""
+async def finish_subscription(bot: Bot, sub, text: str, reason: str):
+    """
+    Сообщает пользователю о снятии подписки и удаляет её (даже если сообщение не доставлено).
+    reason — для статистики: completed (озвучка дошла до конца) или stale (брошенная озвучка).
+    """
     try:
         await bot.send_message(
             sub.user_id,
@@ -77,6 +82,7 @@ async def finish_subscription(bot: Bot, sub, text: str):
         logger.error(f"Failed to send finish message to {sub.user_id}: {e}")
 
     await db.delete_subscription(sub.id)
+    await stats.increment(f"subscriptions.{reason}")
 
 
 def _completed_text(sub) -> str:
@@ -102,6 +108,11 @@ async def _notify_subscription(bot: Bot, sub, releases: list):
     if _is_quiet_now(sub.user):
         # Не теряем: серии лежат в истории и уйдут первой проверкой после тихих часов
         logger.info(f"Deferred quiet-hours notification for {sub.user_id}: {sub.anime_title} ep {fresh_episodes}")
+        # Проверка идёт раз в 20 минут — в статистику отложенное уведомление попадает один раз
+        deferred_key = (sub.id, fresh_episodes[-1])
+        if deferred_key not in _deferred_counted:
+            _deferred_counted.add(deferred_key)
+            await stats.increment("notifications.deferred")
         return
 
     new_ep_num = fresh_episodes[-1]
@@ -127,14 +138,17 @@ async def _notify_subscription(bot: Bot, sub, releases: list):
         await db.update_sub_last_episode(sub.id, f"Серия {new_ep_num}")
     except Exception as e:
         logger.error(f"Failed to send to {sub.user_id}: {e}")
+        await stats.increment("notifications.failed")
         return
+    await stats.increment("notifications.sent")
 
     if sub.total_episodes and new_ep_num >= sub.total_episodes:
-        await finish_subscription(bot, sub, _completed_text(sub))
+        await finish_subscription(bot, sub, _completed_text(sub), "completed")
         logger.info(f"Anime finished and removed: {sub.anime_title}")
 
 
 async def check_updates(bot: Bot):
+    stats.set_source(stats.SOURCE_CHECKER)
     try:
         logger.debug("Starting anime check cycle...")
 
@@ -183,8 +197,9 @@ async def check_subscriptions_status(bot: Bot, notify_summary: bool = False, for
         logger.info("Subscriptions status check is already running")
         return None
 
+    stats.set_source(stats.SOURCE_STATUS_CHECK)
     async with _status_check_lock:
-        stats = {"checked_urls": 0, "failed_urls": 0, "updated_totals": 0, "completed": 0, "stale": 0}
+        counts = {"checked_urls": 0, "failed_urls": 0, "updated_totals": 0, "completed": 0, "stale": 0}
         try:
             logger.info("Starting subscriptions status check...")
             subscriptions = await db.get_all_subscriptions()
@@ -196,8 +211,8 @@ async def check_subscriptions_status(bot: Bot, notify_summary: bool = False, for
             url_map = {}
             for sub in subscriptions:
                 if _is_completed(sub, sub.total_episodes):
-                    await finish_subscription(bot, sub, _completed_text(sub))
-                    stats["completed"] += 1
+                    await finish_subscription(bot, sub, _completed_text(sub), "completed")
+                    counts["completed"] += 1
                     continue
 
                 is_stale_candidate = sub.last_episode_at is not None and sub.last_episode_at < stale_before
@@ -213,9 +228,9 @@ async def check_subscriptions_status(bot: Bot, notify_summary: bool = False, for
 
             for url, subs in url_map.items():
                 info = await parser.get_anime_info(url, bot)
-                stats["checked_urls"] += 1
+                counts["checked_urls"] += 1
                 if not info:
-                    stats["failed_urls"] += 1
+                    counts["failed_urls"] += 1
                     continue
 
                 await db.mark_anime_info_checked(url)
@@ -227,17 +242,17 @@ async def check_subscriptions_status(bot: Bot, notify_summary: bool = False, for
                     if total and sub.total_episodes != total:
                         logger.info(f"Found total episodes for {url}: {total}")
                         await db.update_total_episodes(sub.id, total)
-                        stats["updated_totals"] += 1
+                        counts["updated_totals"] += 1
 
                     if _is_completed(sub, total or sub.total_episodes):
-                        await finish_subscription(bot, sub, _completed_text(sub))
-                        stats["completed"] += 1
+                        await finish_subscription(bot, sub, _completed_text(sub), "completed")
+                        counts["completed"] += 1
                     elif released and sub.last_episode_at is not None and sub.last_episode_at < stale_before:
-                        await finish_subscription(bot, sub, _stale_text(sub))
-                        stats["stale"] += 1
+                        await finish_subscription(bot, sub, _stale_text(sub), "stale")
+                        counts["stale"] += 1
                         logger.info(f"Stale subscription removed: {sub.anime_title} ({sub.voiceover})")
 
-            logger.info(f"Subscriptions status check finished: {stats}")
+            logger.info(f"Subscriptions status check finished: {counts}")
         except Exception as e:
             logger.error(f"Checker subscriptions status error: {e}")
             await notify_admins(
@@ -251,10 +266,10 @@ async def check_subscriptions_status(bot: Bot, notify_summary: bool = False, for
             await notify_admins(
                 bot,
                 "Проверка подписок завершена.\n\n"
-                f"Страниц проверено: <b>{stats['checked_urls']}</b> (ошибок: {stats['failed_urls']})\n"
-                f"Обновлено число серий: <b>{stats['updated_totals']}</b>\n"
-                f"Завершённых снято: <b>{stats['completed']}</b>\n"
-                f"Брошенных озвучек снято: <b>{stats['stale']}</b>",
+                f"Страниц проверено: <b>{counts['checked_urls']}</b> (ошибок: {counts['failed_urls']})\n"
+                f"Обновлено число серий: <b>{counts['updated_totals']}</b>\n"
+                f"Завершённых снято: <b>{counts['completed']}</b>\n"
+                f"Брошенных озвучек снято: <b>{counts['stale']}</b>",
                 level="INFO"
             )
-        return stats
+        return counts

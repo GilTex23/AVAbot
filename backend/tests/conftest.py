@@ -49,6 +49,20 @@ def fake_bot():
     return FakeBot()
 
 
+@pytest.fixture(autouse=True)
+def no_stats_writes_without_database(request, monkeypatch):
+    """Тесты без базы не должны писать статистику: иначе соединения к Postgres остаются в пуле чужого event loop"""
+    if "database" in request.fixturenames:
+        return
+    from database import requests as db
+
+    async def skip(*args, **kwargs):
+        return None
+
+    for name in ("increment_daily_stats", "record_user_activity", "add_key_snapshots"):
+        monkeypatch.setattr(db, name, skip)
+
+
 @pytest.fixture(scope="session")
 def fixture_html():
     def read(name: str) -> str:
@@ -72,8 +86,8 @@ async def database(migrated_database):
 
     async with db.engine.begin() as conn:
         await conn.execute(text(
-            "TRUNCATE episode_releases, episode_airings, scraper_api_key_usage, scraper_api_keys, "
-            "subscriptions, users RESTART IDENTITY CASCADE"
+            "TRUNCATE episode_releases, episode_airings, scraper_api_key_usage, scraper_key_snapshots, scraper_api_keys, "
+            "daily_stats, user_activity, subscriptions, users RESTART IDENTITY CASCADE"
         ))
     await key_pool.reload()
     yield db

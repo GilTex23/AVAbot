@@ -9,7 +9,7 @@ import config
 from api.miniapp import validate_init_data
 from database import requests as db
 from loader import bot
-from services import checker, health, scraper_keys
+from services import checker, health, scraper_keys, stats
 
 router = APIRouter(prefix="/api/miniapp/admin", tags=["miniapp-admin"])
 
@@ -31,7 +31,19 @@ async def require_admin(request: Request) -> dict:
     user = validate_init_data(init_data, ADMIN_INIT_DATA_MAX_AGE_SECONDS)
     if int(user["id"]) not in config.ADMIN_IDS:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Admin access required")
+    stats.set_source(stats.SOURCE_ADMIN)
     return user
+
+
+STATS_PERIODS = (7, 30, 90, 180)
+
+
+@router.get("/stats")
+async def get_stats(days: int = 30, _: dict = Depends(require_admin)):
+    """Статистика для экрана «Статистика»: ряды по дням за период, база данных и сервер"""
+    if days not in STATS_PERIODS:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=f"Период: {', '.join(map(str, STATS_PERIODS))} дней")
+    return await stats.build_stats(days)
 
 
 def _iso(value: datetime.datetime | None) -> str | None:

@@ -1,5 +1,6 @@
-import { ArrowLeft, Check, KeyRound, ListChecks, Loader2, Pencil, Plus, RefreshCw, Trash2, X } from "lucide-react";
-import { useEffect, useState, type FormEvent } from "react";
+import { ArrowLeft, BarChart3, Check, ChevronRight, KeyRound, ListChecks, Loader2, Pencil, Plus, RefreshCw, Trash2, X } from "lucide-react";
+import { useCallback, useEffect, useState, type FormEvent } from "react";
+import { AdminStats } from "./AdminStats";
 import { Badge } from "../components/ui/badge";
 import { Button } from "../components/ui/button";
 import { Card } from "../components/ui/card";
@@ -105,6 +106,18 @@ function keyBadge(key: ScraperKey): { label: string; tone: Tone } {
 }
 
 export function Admin({ refreshKey, onBack }: AdminProps) {
+  const [view, setView] = useState<"main" | "stats">("main");
+  const openStats = useCallback(() => setView("stats"), []);
+  const closeStats = useCallback(() => setView("main"), []);
+
+  return view === "stats" ? (
+    <AdminStats refreshKey={refreshKey} onBack={closeStats} />
+  ) : (
+    <AdminMain refreshKey={refreshKey} onBack={onBack} onOpenStats={openStats} />
+  );
+}
+
+function AdminMain({ refreshKey, onBack, onOpenStats }: AdminProps & { onOpenStats: () => void }) {
   const [data, setData] = useState<ScraperKeysOverview | null>(null);
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState<string | null>(null);
@@ -190,6 +203,17 @@ export function Admin({ refreshKey, onBack }: AdminProps) {
           <p>Ключи ScraperAPI и проверка подписок</p>
         </div>
       </section>
+
+      <button type="button" className="card settings-card settings-link" onClick={onOpenStats}>
+        <span className="settings-card__head">
+          <BarChart3 size={22} />
+          <span className="settings-link__text">
+            <span className="settings-link__title">Статистика</span>
+            <span className="settings-link__caption">Запросы и ключи, бот, база данных и сервер — с графиками</span>
+          </span>
+        </span>
+        <ChevronRight size={20} />
+      </button>
 
       {notice ? <div className="notice">{notice}</div> : null}
 

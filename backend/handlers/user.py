@@ -6,7 +6,7 @@ from contextlib import suppress
 
 from database import requests as db
 from keyboards import inline
-from services import parser
+from services import parser, stats
 from services.subscription_rules import subscription_block_reason
 from utils.states import UpdatesState, ScheduleState
 import logging
@@ -218,6 +218,8 @@ async def cb_add_from_list(callback: types.CallbackQuery, state: FSMContext):
         voiceover=anime['studio'],
         total_eps=info['total_episodes']
     )
+    if success:
+        await stats.increment("subscriptions.created", stats.SOURCE_BOT)
 
     if success:
         total_str = info['total_episodes'] if info['total_episodes'] else "?"
@@ -392,6 +394,7 @@ async def cb_schedule_sub_finalize(callback: types.CallbackQuery, state: FSMCont
     total_str = total_eps if total_eps else "?"
 
     if success:
+        await stats.increment("subscriptions.created", stats.SOURCE_BOT)
         await callback.message.edit_text(
             f"✅ <b>Подписка оформлена!</b>\n\n"
             f"📺 {title}\n"
@@ -450,6 +453,7 @@ async def cb_unsubscribe(callback: types.CallbackQuery):
     sub_id = int(callback.data.split("unsub_")[1])
 
     await db.delete_subscription(sub_id)
+    await stats.increment("subscriptions.deleted", stats.SOURCE_BOT)
     await callback.answer("🗑 Подписка удалена")
 
     # Обновляем список (рекурсивно вызываем функцию просмотра подписок)

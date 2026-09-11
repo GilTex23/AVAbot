@@ -1,5 +1,6 @@
 import { getTelegramInitData } from "../lib/telegram";
 import type {
+  AdminStats,
   AnimeDetails,
   NewScraperKey,
   QuietHoursSettings,
@@ -157,6 +158,10 @@ export function saveTimeZone(timezone: string) {
     method: "PUT",
     body: JSON.stringify({ timezone }),
   });
+}
+
+export function getAdminStats(days: number): Promise<AdminStats> {
+  return fetchJson(`/api/miniapp/admin/stats?days=${days}`);
 }
 
 export function getAdminKeys(): Promise<ScraperKeysOverview> {

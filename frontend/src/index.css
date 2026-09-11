@@ -1264,6 +1264,276 @@ input[type="time"].input::-webkit-calendar-picker-indicator {
   font-weight: 650;
 }
 
+.stats-section {
+  display: grid;
+  gap: 10px;
+}
+
+.stats-section__head h2 {
+  margin: 8px 0 0;
+  font-size: 22px;
+  line-height: 1.2;
+}
+
+.stats-section__head p {
+  margin: 4px 0 0;
+  color: var(--muted);
+  font-size: 13px;
+  line-height: 1.4;
+}
+
+.stats-loading {
+  flex: 0 0 auto;
+  align-self: center;
+  color: var(--muted);
+}
+
+.stat-tiles {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+  gap: 8px;
+}
+
+.stat-tile {
+  display: grid;
+  align-content: start;
+  gap: 3px;
+  min-width: 0;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 10px 12px;
+  background: var(--surface);
+}
+
+.stat-tile span,
+.stat-tile small {
+  color: var(--soft);
+  font-size: 12px;
+  font-weight: 700;
+  line-height: 1.35;
+  overflow-wrap: anywhere;
+}
+
+.stat-tile strong {
+  color: var(--text);
+  font-size: 21px;
+  font-weight: 850;
+  line-height: 1.15;
+  font-variant-numeric: tabular-nums;
+}
+
+.stat-tile__value--danger {
+  color: var(--danger) !important;
+}
+
+.stat-tile__value--warning {
+  color: var(--amber) !important;
+}
+
+.chart-card {
+  display: grid;
+  gap: 10px;
+  min-width: 0;
+  padding: 12px;
+}
+
+.chart-card__head,
+.chart-fullscreen__head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.chart-card h3,
+.chart-fullscreen h3,
+.stats-card-title {
+  margin: 0;
+  color: var(--text);
+  font-size: 16px;
+  font-weight: 750;
+  line-height: 1.25;
+}
+
+.chart-card__head p,
+.chart-fullscreen__head p {
+  margin: 3px 0 0;
+  color: var(--soft);
+  font-size: 12px;
+  line-height: 1.35;
+}
+
+.chart-card__expand {
+  display: grid;
+  flex: 0 0 auto;
+  width: 34px;
+  height: 34px;
+  place-items: center;
+  border: 1px solid var(--border);
+  border-radius: 7px;
+  background: var(--surface-soft);
+  color: var(--muted);
+  cursor: pointer;
+}
+
+.chart {
+  display: grid;
+  gap: 6px;
+  min-width: 0;
+}
+
+.chart__canvas {
+  width: 100%;
+  min-width: 0;
+}
+
+.chart-svg {
+  display: block;
+  touch-action: pan-y;
+  user-select: none;
+  -webkit-user-select: none;
+}
+
+.chart-svg--full {
+  touch-action: none;
+}
+
+.chart-grid {
+  stroke: var(--border);
+  stroke-width: 1;
+}
+
+.chart-axis {
+  fill: var(--soft);
+  font-size: 11px;
+  font-weight: 650;
+  font-variant-numeric: tabular-nums;
+}
+
+.chart-selection {
+  fill: rgba(255, 255, 255, 0.06);
+}
+
+.chart-cursor {
+  stroke: rgba(255, 255, 255, 0.35);
+  stroke-dasharray: 3 3;
+}
+
+.chart__caption {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 12px;
+  margin: 0;
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.4;
+  font-variant-numeric: tabular-nums;
+}
+
+.chart__caption b {
+  color: var(--text);
+}
+
+.chart__caption span,
+.chart-legend span {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+}
+
+.chart__caption i,
+.chart-legend i {
+  display: inline-block;
+  width: 8px;
+  height: 8px;
+  border-radius: 2px;
+}
+
+.chart-legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 12px;
+  color: var(--soft);
+  font-size: 12px;
+  font-weight: 650;
+}
+
+.chart-fullscreen {
+  position: fixed;
+  top: 0;
+  left: 0;
+  z-index: 80;
+  display: grid;
+  align-content: start;
+  gap: 10px;
+  overflow: hidden;
+  padding: 14px 16px;
+  background: var(--page);
+  transform-origin: top left;
+}
+
+.bar-list {
+  display: grid;
+  gap: 10px;
+}
+
+.bar-list__row {
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+}
+
+.bar-list__text {
+  display: flex;
+  justify-content: space-between;
+  gap: 10px;
+  font-size: 13px;
+}
+
+.bar-list__text span {
+  min-width: 0;
+  overflow: hidden;
+  color: var(--text);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.bar-list__text b {
+  flex: 0 0 auto;
+  color: var(--muted);
+  font-variant-numeric: tabular-nums;
+}
+
+.bar-list__track {
+  height: 6px;
+  overflow: hidden;
+  border-radius: 999px;
+  background: var(--surface-soft);
+}
+
+.bar-list__track i {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+  background: var(--red);
+}
+
+.bar-list__row small {
+  color: var(--soft);
+  font-size: 12px;
+}
+
+.usage-meter {
+  display: grid;
+  gap: 5px;
+}
+
+.usage-meter small {
+  color: var(--muted);
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+}
+
 @media (min-width: 720px) {
   .app-main {
     padding-top: 30px;

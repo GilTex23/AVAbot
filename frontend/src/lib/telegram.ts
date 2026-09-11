@@ -109,17 +109,33 @@ export function showTelegramAlert(message: string) {
   window.alert(message);
 }
 
-/** Показывает системную кнопку «Назад» Telegram; возвращает функцию, которая её убирает */
+// Экраны вкладываются (админка → статистика → график на весь экран): кнопка «Назад» закрывает только верхний
+const backHandlers: Array<() => void> = [];
+
+function dispatchBack() {
+  backHandlers[backHandlers.length - 1]?.();
+}
+
+/** Показывает системную кнопку «Назад» Telegram для текущего экрана; возвращает функцию, которая снимает обработчик */
 export function showTelegramBackButton(onBack: () => void) {
   const backButton = getTelegramWebApp()?.BackButton;
   if (!backButton) {
     return () => {};
   }
-  backButton.onClick(onBack);
-  backButton.show();
+  backHandlers.push(onBack);
+  if (backHandlers.length === 1) {
+    backButton.onClick(dispatchBack);
+    backButton.show();
+  }
   return () => {
-    backButton.offClick(onBack);
-    backButton.hide();
+    const index = backHandlers.lastIndexOf(onBack);
+    if (index >= 0) {
+      backHandlers.splice(index, 1);
+    }
+    if (!backHandlers.length) {
+      backButton.offClick(dispatchBack);
+      backButton.hide();
+    }
   };
 }
 

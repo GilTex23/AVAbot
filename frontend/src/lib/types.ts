@@ -122,6 +122,71 @@ export type ScraperKeysOverview = {
   parser_health: ParserHealth;
 };
 
+/** Ряды по дням: значения выровнены по AdminStats.days */
+export type DailySeries = Record<string, number[]>;
+
+export type AdminStats = {
+  period_days: number;
+  days: string[];
+  scraper: {
+    success_by_source: DailySeries;
+    success_by_page: DailySeries;
+    by_key: DailySeries;
+    failed: number[];
+    timeouts: number[];
+    failed_by_status: DailySeries;
+    cache_hits: number[];
+    latency_avg_ms: Array<number | null>;
+    credits: Array<{ at: string; remaining: number; limit: number }>;
+    key_status_changes: DailySeries;
+  };
+  bot: {
+    users: number;
+    subscriptions: number;
+    subscribers: number;
+    quiet_hours_users: number;
+    top_titles: Array<{ title: string; count: number }>;
+    voiceovers: Array<{ name: string; count: number }>;
+    active_7d: number;
+    active_30d: number;
+    active_by_source: DailySeries;
+    active_total: number[];
+    new_users: number[];
+    notifications_sent: number[];
+    notifications_deferred: number[];
+    subscriptions_created: number[];
+    subscriptions_deleted: number[];
+    subscriptions_completed: number[];
+    subscriptions_stale: number[];
+  };
+  parser: { home_results: DailySeries };
+  history: { releases: number; airings: number; titles: number; releases_per_day: number[] };
+  database: {
+    size_bytes: number;
+    tables: Array<{ name: string; rows: number; total_bytes: number; table_bytes: number; index_bytes: number }>;
+    connections: number;
+    version: string;
+    started_at?: string | null;
+    retention_days: number;
+  };
+  server: {
+    cpu_percent: number;
+    cpu_count: number | null;
+    load_average: number[] | null;
+    memory_total: number;
+    memory_used: number;
+    memory_percent: number;
+    process_memory: number;
+    disk_total: number;
+    disk_used: number;
+    disk_percent: number;
+    logs_bytes: number;
+    process_uptime_seconds: number;
+    system_uptime_seconds: number;
+    python: string;
+  };
+};
+
 export type ParserHealth = {
   last_attempt_at?: string | null;
   last_success_at?: string | null;

@@ -13,6 +13,7 @@ from cryptography.fernet import Fernet, InvalidToken
 
 import config
 from database import requests as db
+from services import stats
 from services.notifier import notify_admins
 
 
@@ -169,7 +170,10 @@ def _key_label(name: str, email: str | None) -> str:
 
 
 async def _notify_transition(bot: Bot | None, name: str, email: str | None, old: str, new: str, reason: str | None = None):
-    if bot is None or old == new:
+    if old == new:
+        return
+    await stats.increment("keys.status_change", new)
+    if bot is None:
         return
 
     label = _key_label(name, email)
@@ -268,6 +272,8 @@ async def refresh_all_keys(bot: Bot | None):
     async with aiohttp.ClientSession() as session:
         await asyncio.gather(*(refresh_key(row.id, bot, session) for row in rows))
     await key_pool.reload()
+    # Для графика остатка кредитов во времени
+    await stats.record_key_snapshots(await db.get_scraper_keys())
 
 
 async def bootstrap():

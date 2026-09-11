@@ -2,7 +2,10 @@ from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 from sqlalchemy import select, update, delete, and_, func, text
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.orm import joinedload
-from database.models import Base, User, Subscription, ScraperApiKey, ScraperApiKeyUsage, EpisodeRelease, EpisodeAiring
+from database.models import (
+    Base, User, Subscription, ScraperApiKey, ScraperApiKeyUsage, EpisodeRelease, EpisodeAiring,
+    DailyStat, UserActivity, ScraperKeySnapshot,
+)
 import datetime
 import config
 
@@ -257,6 +260,191 @@ async def get_release_lag_samples(since: datetime.datetime):
             .where(EpisodeRelease.released_at >= since)
         )
         return result.all()
+
+
+# --- STATISTICS (админка) ---
+async def increment_daily_stats(rows: list[tuple[str, str, int]], day: datetime.date | None = None):
+    """rows: (metric, dimension, value) — прибавляются к счётчикам за день"""
+    totals = {}
+    for metric, dimension, value in rows:
+        totals[(metric, dimension)] = totals.get((metric, dimension), 0) + value
+    if not totals:
+        return
+    day = day or datetime.datetime.utcnow().date()
+    async with async_session() as session:
+        stmt = pg_insert(DailyStat).values([
+            {"day": day, "metric": metric, "dimension": dimension, "value": value}
+            for (metric, dimension), value in totals.items()
+        ])
+        stmt = stmt.on_conflict_do_update(
+            index_elements=[DailyStat.day, DailyStat.metric, DailyStat.dimension],
+            set_={"value": DailyStat.value + stmt.excluded.value},
+        )
+        await session.execute(stmt)
+        await session.commit()
+
+
+async def record_user_activity(user_id: int, source: str, day: datetime.date | None = None):
+    async with async_session() as session:
+        stmt = pg_insert(UserActivity).values(day=day or datetime.datetime.utcnow().date(), user_id=user_id, source=source)
+        await session.execute(stmt.on_conflict_do_nothing())
+        await session.commit()
+
+
+async def add_key_snapshots(rows: list[dict]):
+    if not rows:
+        return
+    async with async_session() as session:
+        await session.execute(pg_insert(ScraperKeySnapshot).values(rows))
+        await session.commit()
+
+
+async def get_daily_stats(since: datetime.date):
+    async with async_session() as session:
+        result = await session.execute(
+            select(DailyStat.day, DailyStat.metric, DailyStat.dimension, DailyStat.value).where(DailyStat.day >= since)
+        )
+        return result.all()
+
+
+async def get_key_usage_by_day(since: datetime.date):
+    """(day, key name, success, failed) по ключам, которые ещё есть в базе"""
+    async with async_session() as session:
+        result = await session.execute(
+            select(ScraperApiKeyUsage.day, ScraperApiKey.name, ScraperApiKeyUsage.success, ScraperApiKeyUsage.failed)
+            .join(ScraperApiKey, ScraperApiKey.id == ScraperApiKeyUsage.key_id)
+            .where(ScraperApiKeyUsage.day >= since)
+        )
+        return result.all()
+
+
+async def get_key_snapshots(since: datetime.datetime):
+    async with async_session() as session:
+        result = await session.execute(
+            select(ScraperKeySnapshot).where(ScraperKeySnapshot.taken_at >= since).order_by(ScraperKeySnapshot.taken_at)
+        )
+        return result.scalars().all()
+
+
+async def get_activity_by_day(since: datetime.date):
+    """(day, source, число пользователей) и отдельно — все уникальные за день"""
+    async with async_session() as session:
+        by_source = await session.execute(
+            select(UserActivity.day, UserActivity.source, func.count(func.distinct(UserActivity.user_id)))
+            .where(UserActivity.day >= since)
+            .group_by(UserActivity.day, UserActivity.source)
+        )
+        total = await session.execute(
+            select(UserActivity.day, func.count(func.distinct(UserActivity.user_id)))
+            .where(UserActivity.day >= since)
+            .group_by(UserActivity.day)
+        )
+        return by_source.all(), total.all()
+
+
+async def count_active_users(since: datetime.date) -> int:
+    async with async_session() as session:
+        return await session.scalar(
+            select(func.count(func.distinct(UserActivity.user_id))).where(UserActivity.day >= since)
+        )
+
+
+async def get_new_users_by_day(since: datetime.date):
+    async with async_session() as session:
+        day = func.date(User.registered_at)
+        result = await session.execute(
+            select(day, func.count(User.id))
+            .where(User.registered_at >= datetime.datetime.combine(since, datetime.time()))
+            .group_by(day)
+        )
+        return result.all()
+
+
+async def get_bot_overview(top: int = 10):
+    """Итоги по пользователям и подпискам для статистики"""
+    async with async_session() as session:
+        users = await session.scalar(select(func.count(User.id)))
+        subscriptions = await session.scalar(select(func.count(Subscription.id)))
+        subscribers = await session.scalar(select(func.count(func.distinct(Subscription.user_id))))
+        quiet = await session.scalar(select(func.count(User.id)).where(User.quiet_hours_enabled.is_(True)))
+        top_titles = await session.execute(
+            select(Subscription.anime_title, func.count(Subscription.id).label("count"))
+            .group_by(Subscription.anime_title)
+            .order_by(text("count DESC"), Subscription.anime_title)
+            .limit(top)
+        )
+        voiceovers = await session.execute(
+            select(Subscription.voiceover, func.count(Subscription.id).label("count"))
+            .group_by(Subscription.voiceover)
+            .order_by(text("count DESC"), Subscription.voiceover)
+            .limit(top)
+        )
+        return {
+            "users": users,
+            "subscriptions": subscriptions,
+            "subscribers": subscribers,
+            "quiet_hours_users": quiet,
+            "top_titles": [{"title": title, "count": count} for title, count in top_titles.all()],
+            "voiceovers": [{"name": name, "count": count} for name, count in voiceovers.all()],
+        }
+
+
+async def get_history_overview(since: datetime.date):
+    async with async_session() as session:
+        releases = await session.scalar(select(func.count(EpisodeRelease.id)))
+        airings = await session.scalar(select(func.count()).select_from(EpisodeAiring))
+        titles = await session.scalar(select(func.count(func.distinct(EpisodeRelease.anime_url))))
+        day = func.date(EpisodeRelease.first_seen_at)
+        per_day = await session.execute(
+            select(day, func.count(EpisodeRelease.id))
+            .where(EpisodeRelease.first_seen_at >= datetime.datetime.combine(since, datetime.time()))
+            .group_by(day)
+        )
+        return {"releases": releases, "airings": airings, "titles": titles, "per_day": per_day.all()}
+
+
+async def get_database_overview():
+    """Размер базы и таблиц — средствами самого Postgres"""
+    async with async_session() as session:
+        size = await session.scalar(text("SELECT pg_database_size(current_database())"))
+        tables = await session.execute(text(
+            "SELECT relname, n_live_tup, pg_total_relation_size(relid), pg_relation_size(relid), pg_indexes_size(relid) "
+            "FROM pg_stat_user_tables ORDER BY pg_total_relation_size(relid) DESC"
+        ))
+        connections = await session.scalar(text(
+            "SELECT count(*) FROM pg_stat_activity WHERE datname = current_database()"
+        ))
+        version = await session.scalar(text("SHOW server_version"))
+        started_at = await session.scalar(text("SELECT pg_postmaster_start_time()"))
+        return {
+            "size_bytes": size,
+            "tables": [
+                {"name": name, "rows": rows, "total_bytes": total, "table_bytes": table, "index_bytes": indexes}
+                for name, rows, total, table, indexes in tables.all()
+            ],
+            "connections": connections,
+            "version": version,
+            "started_at": started_at,
+        }
+
+
+async def prune_statistics(before: datetime.date) -> dict:
+    """Удаляет статистику и историю старше before; возвращает, сколько строк удалено по таблицам"""
+    before_dt = datetime.datetime.combine(before, datetime.time())
+    statements = {
+        "daily_stats": delete(DailyStat).where(DailyStat.day < before),
+        "user_activity": delete(UserActivity).where(UserActivity.day < before),
+        "scraper_api_key_usage": delete(ScraperApiKeyUsage).where(ScraperApiKeyUsage.day < before),
+        "scraper_key_snapshots": delete(ScraperKeySnapshot).where(ScraperKeySnapshot.taken_at < before_dt),
+        "episode_releases": delete(EpisodeRelease).where(EpisodeRelease.first_seen_at < before_dt),
+        "episode_airings": delete(EpisodeAiring).where(EpisodeAiring.air_at < before_dt),
+    }
+    deleted = {}
+    async with async_session() as session:
+        for table, statement in statements.items():
+            deleted[table] = (await session.execute(statement)).rowcount
+        await session.commit()
+    return deleted
 
 
 # --- SCRAPER API KEYS ---

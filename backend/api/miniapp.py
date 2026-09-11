@@ -12,7 +12,7 @@ from fastapi import APIRouter, Depends, HTTPException, Request, status
 import config
 from database import requests as db
 from loader import bot
-from services import forecast, parser
+from services import forecast, parser, stats
 from services.subscription_rules import subscription_block_reason
 
 logger = logging.getLogger(__name__)
@@ -45,7 +45,7 @@ def validate_init_data(init_data: str, max_age_seconds: int = 86400) -> dict:
     return json.loads(user_raw)
 
 
-async def get_miniapp_user(request: Request) -> dict:
+def _resolve_miniapp_user(request: Request) -> dict:
     init_data = (
         request.headers.get("x-telegram-init-data")
         or request.query_params.get("initData")
@@ -62,6 +62,14 @@ async def get_miniapp_user(request: Request) -> dict:
             return {"id": config.ADMIN_IDS[0], "username": "admin"}
 
     raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Telegram initData is required")
+
+
+async def get_miniapp_user(request: Request) -> dict:
+    user = _resolve_miniapp_user(request)
+    # Для статистики: запросы к AnimeGO из этого запроса — «мини-апп», пользователь сегодня активен
+    stats.set_source(stats.SOURCE_MINIAPP)
+    await stats.mark_active(int(user["id"]), stats.SOURCE_MINIAPP)
+    return user
 
 
 async def sync_miniapp_user(current_user: dict):
@@ -179,6 +187,8 @@ async def add_subscription(payload: dict, current_user: dict = Depends(get_minia
         total_episodes,
         poster_url,
     )
+    if created:
+        await stats.increment("subscriptions.created", stats.SOURCE_MINIAPP)
     return {"ok": True, "created": created}
 
 
@@ -204,6 +214,7 @@ async def delete_subscription(subscription_id: int, current_user: dict = Depends
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Subscription not found")
 
     await db.delete_subscription(subscription_id)
+    await stats.increment("subscriptions.deleted", stats.SOURCE_MINIAPP)
     return {"ok": True}
 
 

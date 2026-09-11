@@ -1,4 +1,4 @@
-from sqlalchemy import BigInteger, Boolean, String, Column, ForeignKey, Integer, DateTime, Date, UniqueConstraint
+from sqlalchemy import BigInteger, Boolean, String, Column, ForeignKey, Integer, DateTime, Date, UniqueConstraint, Index
 from sqlalchemy.orm import DeclarativeBase, relationship
 from sqlalchemy.ext.asyncio import AsyncAttrs
 import datetime
@@ -91,6 +91,43 @@ class EpisodeAiring(Base):
     episode = Column(Integer, primary_key=True)
     air_at = Column(DateTime, nullable=False)  # UTC
     updated_at = Column(DateTime, nullable=False, default=datetime.datetime.utcnow)
+
+
+class DailyStat(Base):
+    """
+    Дневные счётчики для статистики в админке: metric — что считаем, dimension — разрез
+    (например, metric='scraper.success', dimension='checker:home'). Хранятся 180 дней.
+    """
+    __tablename__ = 'daily_stats'
+
+    day = Column(Date, primary_key=True)
+    metric = Column(String, primary_key=True)
+    dimension = Column(String, primary_key=True, default="")
+    value = Column(BigInteger, nullable=False, default=0)
+
+
+class UserActivity(Base):
+    """Пользователь заходил в этот день (source: miniapp / bot) — для активных за день и неделю"""
+    __tablename__ = 'user_activity'
+
+    day = Column(Date, primary_key=True)
+    user_id = Column(BigInteger, primary_key=True)
+    source = Column(String, primary_key=True)
+
+
+class ScraperKeySnapshot(Base):
+    """Счётчики ключа из /account на момент опроса (раз в 6 часов) — остаток кредитов во времени"""
+    __tablename__ = 'scraper_key_snapshots'
+    __table_args__ = (Index('ix_scraper_key_snapshots_taken_at', 'taken_at'),)
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    taken_at = Column(DateTime, nullable=False)
+    key_id = Column(Integer, ForeignKey('scraper_api_keys.id', ondelete='SET NULL'), nullable=True)
+    key_name = Column(String, nullable=False)
+    request_count = Column(Integer, nullable=True)
+    request_limit = Column(Integer, nullable=True)
+    status = Column(String, nullable=False)
+    enabled = Column(Boolean, nullable=False)
 
 
 class ScraperApiKeyUsage(Base):

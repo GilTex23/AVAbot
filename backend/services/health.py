@@ -13,6 +13,7 @@ from dataclasses import dataclass, field
 
 from aiogram import Bot
 
+from services import stats
 from services.notifier import notify_admins
 
 logger = logging.getLogger(__name__)
@@ -81,6 +82,13 @@ async def record_home_result(bot: Bot | None, home: dict | None) -> list[str]:
     problems = find_problems(home)
     health.problems = problems
     failures = [problem for problem in problems if not problem.startswith(TIMEZONE_PROBLEM_PREFIX)]
+    if home is None:
+        result = "fetch_failed"
+    elif failures:
+        result = "problem"
+    else:
+        result = "timezone_unknown" if problems else "ok"
+    await stats.increment("home.result", result)
 
     if not failures:
         health.last_success_at = now

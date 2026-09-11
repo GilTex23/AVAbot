@@ -28,7 +28,7 @@ from middlewares.callback import CallbackAnswerMiddleware
 from services.logger import setup_logger
 from services.checker import check_updates, check_subscriptions_status
 from services.notifier import notify_admins
-from services import scraper_keys
+from services import scraper_keys, stats
 from database.requests import init_db, engine
 
 from services.admin_panel import authentication_backend, UserAdmin, SubscriptionAdmin
@@ -72,6 +72,8 @@ async def lifespan(app: FastAPI):
     scheduler.add_job(check_subscriptions_status, "cron", hour=21, minute=0, args=[bot], id="subscriptions_status_checker", replace_existing=True)
     # /account не тратит кредиты; первый опрос сразу после старта
     scheduler.add_job(scraper_keys.refresh_all_keys, "interval", hours=6, args=[bot], id="scraper_keys_refresh", replace_existing=True, next_run_time=datetime.now())
+    # Статистика и история старше 180 дней
+    scheduler.add_job(stats.prune_old_stats, "cron", hour=4, minute=30, id="stats_prune", replace_existing=True)
     scheduler.start()
 
     await notify_admins(bot, f"Бот успешно запущен и готов к работе!", level="INFO")
@@ -136,6 +138,14 @@ async def bot_webhook(request: Request):
     try:
         data = await request.json()
         update = types.Update.model_validate(data, context={"bot": bot})
+        # Для статистики: запросы к AnimeGO из обработчиков — «бот», пользователь сегодня активен
+        stats.set_source(stats.SOURCE_BOT)
+        try:
+            from_user = getattr(update.event, "from_user", None)
+        except Exception:
+            from_user = None  # тип обновления, который aiogram не знает
+        if from_user and not from_user.is_bot:
+            await stats.mark_active(from_user.id, stats.SOURCE_BOT)
         await dp.feed_update(bot, update)
     except Exception as e:
         logger.error(f"Error handling webhook: {e}")
