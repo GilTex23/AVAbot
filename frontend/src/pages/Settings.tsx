@@ -26,11 +26,8 @@ export function Settings({ user, onUserUpdated, onOpenAdmin }: SettingsProps) {
   const [savingTimezone, setSavingTimezone] = useState(false);
   const [savingQuiet, setSavingQuiet] = useState(false);
   const [notice, setNotice] = useState<string | null>(null);
-  const timeZones = useMemo(() => {
-    const zones = getTimeZones();
-    // Сохранённый пояс может не входить в список браузера (например, устаревшее имя) — показываем и его
-    return user?.quiet_timezone && !zones.includes(user.quiet_timezone) ? [user.quiet_timezone, ...zones] : zones;
-  }, [user?.quiet_timezone]);
+  // Сохранённый пояс может не входить в список браузера (например, устаревшее имя) — показываем и его
+  const timeZones = useMemo(() => getTimeZones(user?.quiet_timezone), [user?.quiet_timezone]);
   const savedTimezone = user?.quiet_timezone || DEFAULT_TIME_ZONE;
 
   useEffect(() => {
