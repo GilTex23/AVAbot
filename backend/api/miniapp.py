@@ -1,6 +1,7 @@
 import hashlib
 import hmac
 import json
+import logging
 import re
 import time
 from urllib.parse import parse_qsl
@@ -10,7 +11,9 @@ from fastapi import APIRouter, Depends, HTTPException, Request, status
 import config
 from database import requests as db
 from loader import bot
-from services import parser
+from services import forecast, parser
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/api/miniapp", tags=["miniapp"])
 TIME_RE = re.compile(r"^([01]\d|2[0-3]):[0-5]\d$")
@@ -67,7 +70,7 @@ async def sync_miniapp_user(current_user: dict):
     )
 
 
-def _serialize_subscription(sub) -> dict:
+def _serialize_subscription(sub, next_episode: dict | None = None) -> dict:
     return {
         "id": sub.id,
         "title": sub.anime_title,
@@ -76,6 +79,7 @@ def _serialize_subscription(sub) -> dict:
         "voiceover": sub.voiceover,
         "last_episode": sub.last_episode,
         "total_episodes": sub.total_episodes,
+        "next_episode": next_episode,
     }
 
 
@@ -121,7 +125,13 @@ async def get_updates(voiceover: str | None = None, current_user: dict = Depends
 async def get_subscriptions(current_user: dict = Depends(get_miniapp_user)):
     await sync_miniapp_user(current_user)
     subscriptions = await db.get_user_subscriptions(int(current_user["id"]))
-    return {"items": [_serialize_subscription(sub) for sub in subscriptions]}
+    try:
+        forecasts = await forecast.build_forecasts(subscriptions)
+    except Exception as e:
+        # Прогноз — дополнение: без него список подписок всё равно должен открываться
+        logger.error(f"Failed to build episode forecasts: {e}")
+        forecasts = {}
+    return {"items": [_serialize_subscription(sub, forecasts.get(sub.id)) for sub in subscriptions]}
 
 
 @router.post("/subscriptions")

@@ -21,6 +21,21 @@ export type UpdateItem = {
   poster_url?: string;
 };
 
+export type NextEpisodeForecast = {
+  episode: number;
+  expected_at: string;
+  earliest_at: string;
+  latest_at: string;
+  /** Выход оригинала серии; air_estimated — если посчитан по соседней серии, а не взят из расписания */
+  air_at?: string | null;
+  air_estimated: boolean;
+  /** title — по истории этой озвучки на тайтле, studio — по другим тайтлам студии, cadence — по интервалу между сериями, airing — выход оригинала (для «Все») */
+  basis: "title" | "studio" | "cadence" | "airing";
+  lag_hours?: number | null;
+  samples: number;
+  overdue: boolean;
+};
+
 export type SubscriptionItem = {
   id: number;
   title: string;
@@ -29,6 +44,7 @@ export type SubscriptionItem = {
   voiceover: string;
   last_episode?: string | null;
   total_episodes?: number | null;
+  next_episode?: NextEpisodeForecast | null;
 };
 
 export type ScheduleItem = {

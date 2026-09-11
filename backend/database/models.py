@@ -1,4 +1,4 @@
-from sqlalchemy import BigInteger, Boolean, String, Column, ForeignKey, Integer, DateTime, Date
+from sqlalchemy import BigInteger, Boolean, String, Column, ForeignKey, Integer, DateTime, Date, UniqueConstraint
 from sqlalchemy.orm import DeclarativeBase, relationship
 from sqlalchemy.ext.asyncio import AsyncAttrs
 import datetime
@@ -66,6 +66,30 @@ class ScraperApiKey(Base):
     last_error = Column(String, nullable=True)
     last_error_at = Column(DateTime, nullable=True)
     created_at = Column(DateTime, default=datetime.datetime.utcnow)
+
+
+class EpisodeRelease(Base):
+    """Серия в озвучке из ленты на главной AnimeGO — история для прогноза следующей серии"""
+    __tablename__ = 'episode_releases'
+    __table_args__ = (UniqueConstraint('anime_url', 'studio', 'episode', name='uq_episode_releases_anime_studio_episode'),)
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    anime_url = Column(String, nullable=False, index=True)
+    anime_title = Column(String, nullable=False)
+    studio = Column(String, nullable=False)
+    episode = Column(Integer, nullable=False)
+    released_at = Column(DateTime, nullable=False)  # UTC; из ленты, а если время не распознано — момент, когда увидели
+    first_seen_at = Column(DateTime, nullable=False, default=datetime.datetime.utcnow)
+
+
+class EpisodeAiring(Base):
+    """Выход серии в Японии по расписанию на главной AnimeGO"""
+    __tablename__ = 'episode_airings'
+
+    anime_url = Column(String, primary_key=True)
+    episode = Column(Integer, primary_key=True)
+    air_at = Column(DateTime, nullable=False)  # UTC
+    updated_at = Column(DateTime, nullable=False, default=datetime.datetime.utcnow)
 
 
 class ScraperApiKeyUsage(Base):

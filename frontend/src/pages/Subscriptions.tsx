@@ -1,13 +1,29 @@
-import { ExternalLink, Loader2, Trash2 } from "lucide-react";
+import { CalendarClock, ExternalLink, Loader2, Trash2 } from "lucide-react";
 import { useEffect, useState } from "react";
 import { Badge } from "../components/ui/badge";
 import { Button } from "../components/ui/button";
 import { Card } from "../components/ui/card";
 import { LazyImage } from "../components/ui/LazyImage";
 import { deleteSubscription, getSubscriptions } from "../services/api";
-import type { SubscriptionItem } from "../lib/types";
+import type { NextEpisodeForecast, SubscriptionItem } from "../lib/types";
+import { describeForecast, formatForecastWindow } from "../lib/forecast";
 import { hapticNotification } from "../lib/telegram";
-import { openAnime } from "../lib/utils";
+import { cx, openAnime } from "../lib/utils";
+
+function NextEpisode({ forecast }: { forecast: NextEpisodeForecast }) {
+  const when = formatForecastWindow(forecast);
+  return (
+    <div className={cx("subscription-forecast", forecast.overdue && "subscription-forecast--overdue")}>
+      <CalendarClock size={14} />
+      <div>
+        <span className="subscription-forecast__main">
+          {forecast.overdue ? `Серия ${forecast.episode} задерживается — ждали ${when}` : `Серия ${forecast.episode} ≈ ${when}`}
+        </span>
+        <span className="subscription-forecast__hint">{describeForecast(forecast)}</span>
+      </div>
+    </div>
+  );
+}
 
 type SubscriptionsProps = {
   refreshKey: number;
@@ -87,6 +103,7 @@ export function Subscriptions({ refreshKey }: SubscriptionsProps) {
                     {item.last_episode || "Серия ?"} / {item.total_episodes || "?"}
                   </span>
                 </div>
+                {item.next_episode ? <NextEpisode forecast={item.next_episode} /> : null}
               </div>
               <div className="subscription-row__actions">
                 <Button size="icon" variant="ghost" aria-label="Открыть" onClick={() => openAnime(item.link)}>

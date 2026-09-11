@@ -325,6 +325,43 @@ button {
   gap: 6px;
 }
 
+.subscription-forecast {
+  display: flex;
+  align-items: flex-start;
+  gap: 6px;
+  margin-top: 8px;
+  color: var(--muted);
+}
+
+.subscription-forecast > svg {
+  flex: 0 0 auto;
+  margin-top: 2px;
+  color: var(--green);
+}
+
+.subscription-forecast > div {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+}
+
+.subscription-forecast__main {
+  color: var(--text);
+  font-size: 13px;
+  font-weight: 750;
+}
+
+.subscription-forecast__hint {
+  color: var(--soft);
+  font-size: 12px;
+  line-height: 1.35;
+}
+
+.subscription-forecast--overdue > svg,
+.subscription-forecast--overdue .subscription-forecast__main {
+  color: var(--amber);
+}
+
 .schedule-row__poster {
   width: 48px;
   height: 67px;

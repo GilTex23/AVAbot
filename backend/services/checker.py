@@ -1,12 +1,11 @@
 from aiogram import Bot
-from services import parser
+from services import forecast, parser
 from services.notifier import notify_admins
 from utils.antispam import AntiSpamNotify
 from database import requests as db
 import asyncio
 import html
 import logging
-import re
 from datetime import datetime, timedelta, time as dt_time
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
@@ -23,11 +22,14 @@ _status_check_lock = asyncio.Lock()
 
 
 def extract_episode_number(ep_str: str) -> float:
-    """Извлекает номер серии (float) из строки 'Серия 5' или 'Серия 6.5'"""
-    if not ep_str: return 0
-    # Ищем числа (включая дробные)
-    match = re.search(r"(\d+(\.\d+)?)", ep_str)
-    return float(match.group(1)) if match else 0
+    """Номер последней серии: 'Серия 5' -> 5, 'Серия 6.5' -> 6.5, 'Серии 1, 7-8' -> 8"""
+    return parser.max_episode_number(ep_str)
+
+
+def _episodes_label(episodes: list[int]) -> str:
+    if len(episodes) > 1 and episodes == list(range(episodes[0], episodes[-1] + 1)):
+        return f"{episodes[0]}–{episodes[-1]}"
+    return ", ".join(map(str, episodes))
 
 
 def _parse_time(value: str | None, fallback: dt_time) -> dt_time:
@@ -96,11 +98,19 @@ async def check_updates(bot: Bot):
     try:
         logger.debug("Starting anime check cycle...")
 
-        updates = await parser.get_updates(bot)
-        if not updates: return
+        home = await parser.get_home(bot)
+        if not home: return
 
         subscriptions = await db.get_all_subscriptions()
-        if not subscriptions: return
+
+        # История для прогноза следующей серии; сбой здесь не должен мешать уведомлениям
+        try:
+            await forecast.record_home(home, subscriptions)
+        except Exception as e:
+            logger.error(f"Failed to record episode history: {e}")
+
+        updates = home['updates']
+        if not updates or not subscriptions: return
 
         for sub in subscriptions:
             for update in updates:
@@ -118,12 +128,14 @@ async def check_updates(bot: Bot):
                             logger.info(f"Skipped quiet-hours notification for {sub.user_id}")
                             continue
 
-                        # Числовое сравнение серий
+                        # Числовое сравнение серий; выпуск может содержать несколько серий: "Серии 1, 7-8"
                         old_ep_num = extract_episode_number(sub.last_episode)
                         new_ep_num = int(extract_episode_number(update['episode']))
 
                         if new_ep_num > old_ep_num:
                             total_str = sub.total_episodes if sub.total_episodes else "?"
+                            fresh_episodes = [ep for ep in parser.parse_episode_list(update['episode']) if ep > old_ep_num] or [new_ep_num]
+                            episodes_title = "Серии" if len(fresh_episodes) > 1 else "Серия"
 
                             try:
                                 await bot.send_message(
@@ -131,7 +143,7 @@ async def check_updates(bot: Bot):
                                     text=(
                                         f"🔥 <b>Новая серия!</b>\n\n"
                                         f"📺 <b>{update['title']}</b>\n"
-                                        f"🎬 <b>Серия:</b> {new_ep_num} из {total_str}\n"
+                                        f"🎬 <b>{episodes_title}:</b> {_episodes_label(fresh_episodes)} из {total_str}\n"
                                         f"🎙 <b>Озвучка:</b> {update['studio']}\n\n"
                                         f"🔗 <a href='{update['link']}'>Смотреть</a>"
                                     ),
@@ -139,8 +151,8 @@ async def check_updates(bot: Bot):
                                 )
                                 logger.info(f"Sent update to {sub.user_id}: {update['title']} ep {new_ep_num}")
 
-                                # Обновляем последнюю серию
-                                await db.update_sub_last_episode(sub.id, update['episode'])
+                                # Обновляем последнюю серию (одним номером, чтобы "Серии 1, 7-8" не сравнивались по первой)
+                                await db.update_sub_last_episode(sub.id, f"Серия {new_ep_num}")
 
                             except Exception as e:
                                 logger.error(f"Failed to send to {sub.user_id}: {e}")

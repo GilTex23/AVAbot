@@ -1,4 +1,5 @@
 import datetime
+import re
 import aiohttp
 from bs4 import BeautifulSoup as bs
 import logging
@@ -202,61 +203,230 @@ async def get_html(url: str, session: aiohttp.ClientSession = None, bot: Bot=Non
             await session.close()
 
 
+# AnimeGO показывает время по Москве (UTC+3, без перехода на летнее время)
+MSK = datetime.timezone(datetime.timedelta(hours=3))
+
+MONTHS_GENITIVE = {
+    'января': 1, 'февраля': 2, 'марта': 3, 'апреля': 4, 'мая': 5, 'июня': 6,
+    'июля': 7, 'августа': 8, 'сентября': 9, 'октября': 10, 'ноября': 11, 'декабря': 12,
+}
+_TIME_RE = re.compile(r'(\d{1,2}):(\d{2})')
+_DAY_MONTH_RE = re.compile(r'(\d{1,2})\s+([а-яё]+)(?:\s+(\d{4}))?', re.IGNORECASE)
+
+
+def _now_msk() -> datetime.datetime:
+    return datetime.datetime.now(MSK)
+
+
+def _to_utc_naive(value: datetime.datetime) -> datetime.datetime:
+    return value.astimezone(datetime.timezone.utc).replace(tzinfo=None)
+
+
+def _parse_day(text: str, now: datetime.datetime) -> datetime.date | None:
+    """'Сегодня', 'Вчера', 'Завтра', '28 апреля' или '28 апреля 2025' -> дата (год без указания — ближайший к now)"""
+    lowered = text.lower()
+    if 'сегодня' in lowered:
+        return now.date()
+    if 'вчера' in lowered:
+        return now.date() - datetime.timedelta(days=1)
+    if 'завтра' in lowered:
+        return now.date() + datetime.timedelta(days=1)
+
+    match = _DAY_MONTH_RE.search(lowered)
+    if not match or match.group(2) not in MONTHS_GENITIVE:
+        return None
+    day, month = int(match.group(1)), MONTHS_GENITIVE[match.group(2)]
+    if match.group(3):
+        return datetime.date(int(match.group(3)), month, day)
+
+    candidates = []
+    for year in (now.year - 1, now.year, now.year + 1):
+        try:
+            candidates.append(datetime.date(year, month, day))
+        except ValueError:
+            continue
+    return min(candidates, key=lambda candidate: abs(candidate - now.date())) if candidates else None
+
+
+def _parse_msk_datetime(day_text: str, time_text: str, now: datetime.datetime) -> datetime.datetime | None:
+    """Дата и время AnimeGO (по Москве) -> naive UTC"""
+    day = _parse_day(day_text, now)
+    time_match = _TIME_RE.search(time_text)
+    if day is None or not time_match:
+        return None
+    local = datetime.datetime.combine(day, datetime.time(int(time_match.group(1)), int(time_match.group(2))), tzinfo=MSK)
+    return _to_utc_naive(local)
+
+
+_EPISODE_TOKEN_RE = re.compile(r'(\d+)\s*-\s*(\d+)|\d+(?:\.\d+)?')
+
+
+def parse_episode_list(text: str | None) -> list[int]:
+    """
+    Номера серий из подписи AnimeGO: 'Серия 11' -> [11], 'Серии 1, 7-8' -> [1, 7, 8], 'Серия 18 и 19' -> [18, 19].
+    Дробные спешлы вроде 6.5 пропускаются.
+    """
+    episodes = set()
+    for match in _EPISODE_TOKEN_RE.finditer(text or ''):
+        if match.group(1):
+            first, last = int(match.group(1)), int(match.group(2))
+            if first <= last and last - first <= 100:
+                episodes.update(range(first, last + 1))
+        elif '.' not in match.group(0):
+            episodes.add(int(match.group(0)))
+    return sorted(episodes)
+
+
+def max_episode_number(text: str | None) -> float:
+    """Номер последней серии в подписи: 'Серии 1, 7-8' -> 8, 'Серия 6.5' -> 6.5, без номера -> 0"""
+    episodes = parse_episode_list(text)
+    if episodes:
+        return float(episodes[-1])
+    match = re.search(r'\d+(?:\.\d+)?', text or '')
+    return float(match.group(0)) if match else 0.0
+
+
+def _parse_updates(soup, now: datetime.datetime) -> list:
+    fresh_updates = []
+
+    for item in soup.find_all(class_='aw-item'):
+        try:
+            meta_div = item.find(class_='aw-meta')
+            if not meta_div: continue
+
+            meta_text = meta_div.get_text(" ", strip=True)
+
+            if '·' in meta_text:
+                raw_link = item.get('href')
+                link = clean_link(raw_link)
+
+                title_tag = item.find(class_='aw-name')
+                title = title_tag.get_text(strip=True) if title_tag else "Unknown"
+                image_tag = item.find('img')
+                poster_url = clean_asset_url(image_tag.get('src')) if image_tag else ""
+
+                parts = meta_text.split('·')
+                episode_num = parts[0].strip()
+
+                # "AniLiberty — Сегодня, 11:10"
+                rest_part = parts[1]
+                released_at = None
+                if '—' in rest_part:
+                    studio, _, released_text = rest_part.partition('—')
+                    studio = studio.strip()
+                    released_at = _parse_msk_datetime(released_text, released_text, now)
+                else:
+                    studio = rest_part.strip()
+
+                fresh_updates.append({
+                    'title': title,
+                    'episode': episode_num,
+                    'studio': studio,
+                    'link': link,
+                    'poster_url': poster_url,
+                    'released_at': released_at,
+                })
+
+        except Exception as e:
+            logger.warning(f"Error parsing item: {e}")
+            continue
+
+    return fresh_updates
+
+
+def _parse_schedule(soup, now: datetime.datetime) -> list:
+    schedule_widget = next(
+        (widget for widget in soup.find_all(class_='anime-widget') if widget.find(class_='aw-day')), None
+    )
+    if not schedule_widget:
+        return []
+
+    schedule_days = []
+
+    for day_block in schedule_widget.find_all(class_='aw-day'):
+        try:
+            # 1. Заголовок дня: день недели + дата ("28 апреля") или "Сегодня"/"Завтра"
+            day_name_tag = day_block.find(class_='schedule-day')
+            day_date_tag = day_block.find(class_='schedule-date')
+            relative_tag = day_block.find(class_=['schedule-today', 'schedule-tomorrow'])
+
+            day_name = day_name_tag.get_text(strip=True) if day_name_tag else "???"
+            day_date = day_date_tag.get_text(strip=True) if day_date_tag else ""
+
+            full_date_str = f"{day_name} {day_date}".strip()
+            day_text = day_date or (relative_tag.get_text(strip=True) if relative_tag else "")
+
+            # 2. Список аниме в этот день
+            items = []
+            for anime in day_block.find_all(class_='aw-item'):
+                raw_link = anime.get('href')
+                link = clean_link(raw_link)
+
+                title = anime.find(class_='aw-name').get_text(strip=True)
+                image_tag = anime.find('img')
+                poster_url = clean_asset_url(image_tag.get('src')) if image_tag else ""
+
+                time_tag = anime.find(class_='aw-meta__episode-time')
+                time_str = time_tag.get_text(strip=True) if time_tag else ""
+
+                # "Серия 4 (из 12) — 16:00 (Москва)" или "Серия 18 и 19 (из 56)"; у части тайтлов времени нет
+                meta_div = anime.find(class_='aw-meta')
+                meta_text = meta_div.get_text(" ", strip=True) if meta_div else ""
+                total_tag = anime.find(class_='aw-meta__episode-total')
+                totals = parse_episode_list(total_tag.get_text(strip=True)) if total_tag else []
+
+                items.append({
+                    'title': title,
+                    'link': link,
+                    'time': time_str,
+                    'poster_url': poster_url,
+                    'episodes': parse_episode_list(meta_text.split('—')[0].split('(')[0]),
+                    'total_episodes': totals[-1] if totals else None,
+                    'air_at': _parse_msk_datetime(day_text, time_str, now) if day_text and time_str else None,
+                })
+
+            if items:
+                schedule_days.append({
+                    'date_str': full_date_str,
+                    'items': items
+                })
+
+        except Exception as e:
+            logger.warning(f"Error parsing schedule day: {e}")
+            continue
+
+    return schedule_days
+
+
+async def _get_home_soup(bot: Bot):
+    async with aiohttp.ClientSession() as session:
+        html_text = await get_html(URL_MAIN, session, bot)
+    if html_text is None:
+        return None
+    return bs(html_text, 'html.parser')
+
+
+async def get_home(bot: Bot):
+    """
+    Лента свежих серий и расписание с одного запроса главной страницы:
+    {'updates': [...], 'schedule': [...]} или None при ошибке сети.
+    """
+    soup = await _get_home_soup(bot)
+    if soup is None:
+        return None
+    now = _now_msk()
+    return {'updates': _parse_updates(soup, now), 'schedule': _parse_schedule(soup, now)}
+
+
 async def get_updates(bot: Bot):
     """
     Парсит главную страницу и возвращает список свежих серий.
     Возвращает None при ошибке сети/парсинга.
     """
-    async with aiohttp.ClientSession() as session:
-        html_text = await get_html(URL_MAIN, session, bot)
-
-        if html_text is None:
-            return None
-
-        soup = bs(html_text, 'html.parser')
-        all_items = soup.find_all(class_='aw-item')
-
-        fresh_updates = []
-
-        for item in all_items:
-            try:
-                meta_div = item.find(class_='aw-meta')
-                if not meta_div: continue
-
-                meta_text = meta_div.get_text(" ", strip=True)
-
-                if '·' in meta_text:
-                    raw_link = item.get('href')
-                    link = clean_link(raw_link)
-
-                    title_tag = item.find(class_='aw-name')
-                    title = title_tag.get_text(strip=True) if title_tag else "Unknown"
-                    image_tag = item.find('img')
-                    poster_url = clean_asset_url(image_tag.get('src')) if image_tag else ""
-
-                    parts = meta_text.split('·')
-                    episode_num = parts[0].strip()
-
-                    rest_part = parts[1]
-                    studio = "Unknown"
-                    if '—' in rest_part:
-                        studio = rest_part.split('—')[0].strip()
-                    else:
-                        studio = rest_part.strip()
-
-                    fresh_updates.append({
-                        'title': title,
-                        'episode': episode_num,
-                        'studio': studio,
-                        'link': link,
-                        'poster_url': poster_url
-                    })
-
-            except Exception as e:
-                logger.warning(f"Error parsing item: {e}")
-                continue
-
-        return fresh_updates
+    soup = await _get_home_soup(bot)
+    if soup is None:
+        return None
+    return _parse_updates(soup, _now_msk())
 
 
 async def get_anime_info(url: str, bot: Bot):
@@ -310,74 +480,17 @@ async def get_schedule(bot: Bot):
         {
             'date_str': 'Понедельник 23 февраля',
             'items': [
-                {'title': '...', 'link': '...', 'time': '...'},
+                {'title': '...', 'link': '...', 'time': '16:00 (Москва)', 'episodes': [4], 'total_episodes': 12, 'air_at': datetime},
                 ...
             ]
         },
         ...
     ]
     """
-    async with aiohttp.ClientSession() as session:
-        html_text = await get_html(URL_MAIN, session, bot)
-
-        if not html_text:
-            return None
-
-        soup = bs(html_text, 'html.parser')
-        schedule_widget = soup.find(class_='anime-widget')
-
-        if not schedule_widget:
-            return []
-
-        schedule_days = []
-
-        # Находим все блоки дней
-        day_blocks = schedule_widget.find_all(class_='aw-day')
-
-        for day_block in day_blocks:
-            try:
-                # 1. Заголовок дня (День + Дата)
-                day_name_tag = day_block.find(class_='schedule-day')
-                day_date_tag = day_block.find(class_='schedule-date')
-
-                day_name = day_name_tag.get_text(strip=True) if day_name_tag else "???"
-                day_date = day_date_tag.get_text(strip=True) if day_date_tag else ""
-
-                full_date_str = f"{day_name} {day_date}".strip()
-
-                # 2. Список аниме в этот день
-                items = []
-                anime_nodes = day_block.find_all(class_='aw-item')
-
-                for anime in anime_nodes:
-                    raw_link = anime.get('href')
-                    link = clean_link(raw_link)
-
-                    title = anime.find(class_='aw-name').get_text(strip=True)
-                    image_tag = anime.find('img')
-                    poster_url = clean_asset_url(image_tag.get('src')) if image_tag else ""
-
-                    time_tag = anime.find(class_='aw-meta__episode-time')
-                    time_str = time_tag.get_text(strip=True) if time_tag else ""
-
-                    items.append({
-                        'title': title,
-                        'link': link,
-                        'time': time_str,
-                        'poster_url': poster_url
-                    })
-
-                if items:
-                    schedule_days.append({
-                        'date_str': full_date_str,
-                        'items': items
-                    })
-
-            except Exception as e:
-                logger.warning(f"Error parsing schedule day: {e}")
-                continue
-
-        return schedule_days
+    soup = await _get_home_soup(bot)
+    if soup is None:
+        return None
+    return _parse_schedule(soup, _now_msk())
 
 
 async def get_anime_details(url: str, bot: Bot):

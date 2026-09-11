@@ -2,7 +2,7 @@ from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 from sqlalchemy import select, update, delete, and_, func, text
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.orm import joinedload
-from database.models import Base, User, Subscription, ScraperApiKey, ScraperApiKeyUsage
+from database.models import Base, User, Subscription, ScraperApiKey, ScraperApiKeyUsage, EpisodeRelease, EpisodeAiring
 import datetime
 import config
 
@@ -177,6 +177,73 @@ async def update_sub_last_episode(sub_id: int, episode: str):
             .values(last_episode=episode, last_episode_at=datetime.datetime.utcnow())
         )
         await session.commit()
+
+
+# --- EPISODE HISTORY (прогноз следующей серии) ---
+async def record_episode_releases(rows: list[dict]):
+    """rows: anime_url, anime_title, studio, episode, released_at. Уже известные серии не перезаписываются"""
+    if not rows:
+        return
+    now = datetime.datetime.utcnow()
+    async with async_session() as session:
+        stmt = pg_insert(EpisodeRelease).values([{**row, "first_seen_at": now} for row in rows])
+        await session.execute(stmt.on_conflict_do_nothing(constraint="uq_episode_releases_anime_studio_episode"))
+        await session.commit()
+
+
+async def record_episode_airings(rows: list[dict]):
+    """rows: anime_url, episode, air_at. Время выхода обновляется, если расписание сдвинули"""
+    if not rows:
+        return
+    now = datetime.datetime.utcnow()
+    async with async_session() as session:
+        stmt = pg_insert(EpisodeAiring).values([{**row, "updated_at": now} for row in rows])
+        stmt = stmt.on_conflict_do_update(
+            index_elements=[EpisodeAiring.anime_url, EpisodeAiring.episode],
+            set_={"air_at": stmt.excluded.air_at, "updated_at": stmt.excluded.updated_at},
+        )
+        await session.execute(stmt)
+        await session.commit()
+
+
+async def fill_total_episodes(url: str, total_eps: int):
+    """Проставляет число серий подпискам на тайтл, у которых оно ещё неизвестно"""
+    async with async_session() as session:
+        await session.execute(
+            update(Subscription)
+            .where(Subscription.anime_url == url, Subscription.total_episodes.is_(None))
+            .values(total_episodes=total_eps)
+        )
+        await session.commit()
+
+
+async def get_episode_releases(urls: set[str]):
+    async with async_session() as session:
+        result = await session.execute(select(EpisodeRelease).where(EpisodeRelease.anime_url.in_(urls)))
+        return result.scalars().all()
+
+
+async def get_episode_airings(urls: set[str]):
+    async with async_session() as session:
+        result = await session.execute(select(EpisodeAiring).where(EpisodeAiring.anime_url.in_(urls)))
+        return result.scalars().all()
+
+
+async def get_release_lag_samples(since: datetime.datetime):
+    """(studio, released_at, air_at) по всем тайтлам — типичная задержка каждой студии"""
+    async with async_session() as session:
+        result = await session.execute(
+            select(EpisodeRelease.studio, EpisodeRelease.released_at, EpisodeAiring.air_at)
+            .join(
+                EpisodeAiring,
+                and_(
+                    EpisodeAiring.anime_url == EpisodeRelease.anime_url,
+                    EpisodeAiring.episode == EpisodeRelease.episode,
+                ),
+            )
+            .where(EpisodeRelease.released_at >= since)
+        )
+        return result.all()
 
 
 # --- SCRAPER API KEYS ---
