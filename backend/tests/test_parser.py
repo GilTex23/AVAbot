@@ -1,4 +1,5 @@
 import datetime as dt
+from zoneinfo import ZoneInfo
 
 import pytest
 from bs4 import BeautifulSoup
@@ -122,6 +123,30 @@ def test_far_east_proxy_regrouped_by_moscow_date(fixture_html):
     same = next(item for day in schedule_m for item in day["items"] if item["air_at"])
     shifted = next(item for day in schedule_v for item in day["items"] if item["link"] == same["link"] and item["episodes"] == same["episodes"])
     assert shifted["air_at"] == same["air_at"] - dt.timedelta(hours=7)
+
+
+def test_schedule_in_user_timezone(fixture_html):
+    _, _, schedule = parse(fixture_html("animego_home_moscow.html"))
+    assert parser.localize_schedule(schedule, parser.MSK) is schedule  # по умолчанию — как есть, по Москве
+
+    yekaterinburg = ZoneInfo("Asia/Yekaterinburg")
+    local = parser.localize_schedule(schedule, yekaterinburg)
+    first = schedule[0]["items"][0]
+    moved = next(item for day in local for item in day["items"] if item["link"] == first["link"] and item["episodes"] == first["episodes"])
+    assert moved["time"] == "16:57 (Екатеринбург)" and first["time"] == "14:57 (Москва)"  # оригинал из кэша не меняется
+
+    for zone in (yekaterinburg, ZoneInfo("Asia/Vladivostok"), ZoneInfo("Europe/Kaliningrad")):
+        for day in parser.localize_schedule(schedule, zone):
+            dates = {parser._utc_naive_to(item["air_at"], zone).date().isoformat() for item in day["items"] if item["air_at"]}
+            assert dates <= {day["date"]}, (zone, day["date_str"], dates)
+
+
+def test_timezone_helpers():
+    assert parser.zone_or_moscow(None).key == "Europe/Moscow"
+    assert parser.zone_or_moscow("Не/Пояс").key == "Europe/Moscow"
+    assert parser.zone_or_moscow("Asia/Omsk").key == "Asia/Omsk"
+    assert parser.timezone_display_label(ZoneInfo("Asia/Yekaterinburg")) == "Екатеринбург"
+    assert parser.timezone_display_label(ZoneInfo("Etc/GMT-5")) == "UTC+5"
 
 
 def test_unknown_timezone_label_is_not_trusted(fixture_html):

@@ -1,7 +1,7 @@
 import datetime
 import re
 from collections import Counter
-from zoneinfo import ZoneInfo
+from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 import aiohttp
 from bs4 import BeautifulSoup as bs
 import logging
@@ -431,29 +431,33 @@ def _parse_schedule(soup, now: datetime.datetime, zone) -> list:
                 })
 
             if items:
+                day_date = _parse_day(day_text, now.astimezone(zone)) if zone and day_text else None
                 schedule_days.append({
                     'date_str': full_date_str,
+                    'date': day_date.isoformat() if day_date else None,
                     'items': items
                 })
-                day_dates.append(_parse_day(day_text, now.astimezone(zone)) if zone and day_text else None)
 
         except Exception as e:
             logger.warning(f"Error parsing schedule day: {e}")
             continue
 
     if zone is not None:
-        _regroup_by_msk_date(schedule_days, day_dates)
+        _regroup_by_date(schedule_days, MSK)
     return schedule_days
 
 
-def _regroup_by_msk_date(schedule_days: list, day_dates: list):
+def _regroup_by_date(schedule_days: list, zone):
     """
-    Дни на странице — в поясе прокси: у дальневосточного IP вечерние серии по Москве попадают на следующий день.
-    Переносим такие серии в день по московской дате и сортируем по времени (серии без времени — в конце).
-    Серии, чья московская дата выпала за пределы недели на странице (вчерашний вечер по Москве), убираем:
-    в московском расписании их тоже нет, а в историю они попали с прошлых загрузок.
+    Раскладывает серии по дням по дате в поясе zone и сортирует по времени (серии без времени — в конце).
+
+    Дни на странице — в поясе прокси (у дальневосточного IP вечерние серии по Москве попадают на следующий день),
+    а пользователю нужны дни в его поясе. Серии, чья дата выпала за пределы недели на странице, убираются:
+    в расписании этой недели их нет, а в историю они попали с прошлых загрузок.
     """
-    day_by_date = {day_date: day for day, day_date in zip(schedule_days, day_dates) if day_date is not None}
+    day_by_date = {
+        datetime.date.fromisoformat(day['date']): day for day in schedule_days if day.get('date')
+    }
     if not day_by_date:
         return
     first_date, last_date = min(day_by_date), max(day_by_date)
@@ -463,11 +467,11 @@ def _regroup_by_msk_date(schedule_days: list, day_dates: list):
         for item in day['items']:
             if item['air_at'] is None:
                 continue
-            msk_date = _utc_naive_to(item['air_at'], MSK).date()
-            if not first_date <= msk_date <= last_date:
+            local_date = _utc_naive_to(item['air_at'], zone).date()
+            if not first_date <= local_date <= last_date:
                 moves.append((item, day, None))
                 continue
-            target = day_by_date.get(msk_date)
+            target = day_by_date.get(local_date)
             if target is not None and target is not day:
                 moves.append((item, day, target))
 
@@ -479,6 +483,47 @@ def _regroup_by_msk_date(schedule_days: list, day_dates: list):
     for day in schedule_days:
         day['items'].sort(key=lambda item: (item['air_at'] is None, item['air_at'] or datetime.datetime.max))
     schedule_days[:] = [day for day in schedule_days if day['items']]
+
+
+def zone_or_moscow(name: str | None) -> ZoneInfo:
+    """Часовой пояс пользователя из настроек; по умолчанию и при ошибке — Москва"""
+    try:
+        return ZoneInfo(name) if name else MSK
+    except (ZoneInfoNotFoundError, ValueError):
+        return MSK
+
+
+def timezone_display_label(zone: ZoneInfo) -> str:
+    """Подпись пояса для времени в расписании: «Екатеринбург», если есть короткое русское название, иначе «UTC+5»"""
+    if zone.key == "Europe/Moscow":
+        return "Москва"
+    for label, zone_name in TIMEZONE_LABELS.items():
+        if zone_name == zone.key and "," not in label:
+            return label
+    return timezone_alerts.format_offset(datetime.datetime.now(zone).utcoffset())
+
+
+def localize_schedule(schedule_days: list, zone: ZoneInfo) -> list:
+    """
+    Расписание (по Москве) -> в поясе пользователя: время в подписи и разбивка по дням.
+    Возвращает копию; кэшированный разбор страницы не меняется.
+    """
+    if zone.key == "Europe/Moscow":
+        return schedule_days
+
+    label = timezone_display_label(zone)
+    localized = [
+        {
+            **day,
+            'items': [
+                {**item, 'time': f"{_utc_naive_to(item['air_at'], zone):%H:%M} ({label})"} if item['air_at'] else item
+                for item in day['items']
+            ],
+        }
+        for day in schedule_days
+    ]
+    _regroup_by_date(localized, zone)
+    return localized
 
 
 async def _get_home_soup(bot: Bot):

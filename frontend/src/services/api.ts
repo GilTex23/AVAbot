@@ -152,6 +152,13 @@ export function saveQuietHours(settings: QuietHoursSettings) {
   });
 }
 
+export function saveTimeZone(timezone: string) {
+  return fetchJson<{ quiet_timezone: string }>("/api/miniapp/settings/timezone", {
+    method: "PUT",
+    body: JSON.stringify({ timezone }),
+  });
+}
+
 export function getAdminKeys(): Promise<ScraperKeysOverview> {
   return fetchJson("/api/miniapp/admin/keys");
 }

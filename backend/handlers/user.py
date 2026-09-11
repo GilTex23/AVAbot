@@ -292,6 +292,10 @@ async def cb_open_schedule(callback: types.CallbackQuery, state: FSMContext):
         )
         return
 
+    # Время и дни — в часовом поясе из настроек мини-аппа (по умолчанию Москва)
+    user = await db.get_user(callback.from_user.id)
+    schedule_days = parser.localize_schedule(schedule_days, parser.zone_or_moscow(user.quiet_timezone if user else None))
+
     await state.update_data(schedule_days=schedule_days, current_day_index=0)
     await state.set_state(ScheduleState.viewing_schedule)
 

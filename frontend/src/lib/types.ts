@@ -77,7 +77,6 @@ export type QuietHoursSettings = {
   enabled: boolean;
   start: string;
   end: string;
-  timezone: string;
 };
 
 export type ScraperKeyStatus = "active" | "low" | "exhausted" | "invalid";

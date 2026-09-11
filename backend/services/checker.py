@@ -8,7 +8,6 @@ import html
 import logging
 from collections import defaultdict
 from datetime import datetime, timedelta, time as dt_time
-from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 
 logger = logging.getLogger(__name__)
@@ -55,12 +54,7 @@ def _is_quiet_now(user) -> bool:
     if not user or not getattr(user, "quiet_hours_enabled", False):
         return False
 
-    try:
-        zone = ZoneInfo(user.quiet_timezone or "Europe/Moscow")
-    except ZoneInfoNotFoundError:
-        zone = ZoneInfo("Europe/Moscow")
-
-    now = datetime.now(zone).time()
+    now = datetime.now(parser.zone_or_moscow(user.quiet_timezone)).time()
     start = _parse_time(user.quiet_hours_start, dt_time(23, 0))
     end = _parse_time(user.quiet_hours_end, dt_time(9, 0))
     return _is_time_inside_range(now, start, end)

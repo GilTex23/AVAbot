@@ -5,6 +5,7 @@ import logging
 import re
 import time
 from urllib.parse import parse_qsl
+from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 from fastapi import APIRouter, Depends, HTTPException, Request, status
 
@@ -208,11 +209,29 @@ async def delete_subscription(subscription_id: int, current_user: dict = Depends
 
 @router.get("/schedule")
 async def get_schedule(current_user: dict = Depends(get_miniapp_user)):
-    await sync_miniapp_user(current_user)
+    user = await sync_miniapp_user(current_user)
     schedule = await parser.get_schedule(bot)
     if schedule is None:
         raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail="AnimeGO is temporarily unavailable")
-    return {"days": schedule}
+    return {"days": parser.localize_schedule(schedule, parser.zone_or_moscow(user.quiet_timezone))}
+
+
+def _valid_timezone(value) -> str:
+    timezone = (value or "").strip()
+    try:
+        ZoneInfo(timezone)
+    except (ZoneInfoNotFoundError, ValueError):
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Unknown timezone")
+    return timezone
+
+
+@router.put("/settings/timezone")
+async def update_timezone(payload: dict, current_user: dict = Depends(get_miniapp_user)):
+    """Часовой пояс пользователя: расписание, прогнозы и тихие часы"""
+    await sync_miniapp_user(current_user)
+    timezone = _valid_timezone(payload.get("timezone"))
+    await db.update_user_timezone(int(current_user["id"]), timezone)
+    return {"quiet_timezone": timezone}
 
 
 @router.put("/settings/voiceover")
@@ -228,16 +247,15 @@ async def update_voiceover(payload: dict, current_user: dict = Depends(get_minia
 
 @router.put("/settings/quiet-hours")
 async def update_quiet_hours(payload: dict, current_user: dict = Depends(get_miniapp_user)):
-    await sync_miniapp_user(current_user)
+    user = await sync_miniapp_user(current_user)
     enabled = bool(payload.get("enabled"))
     start = (payload.get("start") or "23:00").strip()
     end = (payload.get("end") or "09:00").strip()
-    timezone = (payload.get("timezone") or "Europe/Moscow").strip()
+    # Пояс теперь настраивается отдельно; старые клиенты ещё присылают его вместе с тихими часами
+    timezone = _valid_timezone(payload["timezone"]) if payload.get("timezone") else user.quiet_timezone
 
     if not TIME_RE.match(start) or not TIME_RE.match(end):
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Time must be HH:MM")
-    if not timezone:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Timezone is required")
 
     await db.update_user_quiet_hours(int(current_user["id"]), enabled, start, end, timezone)
     return {

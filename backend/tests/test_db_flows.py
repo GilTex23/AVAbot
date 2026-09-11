@@ -244,6 +244,31 @@ async def test_my_week(database, client):
     assert items[0]["forecast"]["episode"] == 4 and items[0]["forecast"]["basis"] == "title"
 
 
+async def test_user_timezone_settings_and_schedule(database, client, monkeypatch, fixture_html):
+    soup = BeautifulSoup(fixture_html("animego_home_moscow.html"), "html.parser")
+    schedule = parser._parse_schedule(soup, FETCHED_AT, parser._page_zone(soup))
+
+    async def fake_schedule(bot):
+        return schedule
+
+    monkeypatch.setattr(parser, "get_schedule", fake_schedule)
+    headers = init_data(30)
+
+    moscow = (await client.get("/api/miniapp/schedule", headers=headers)).json()["days"]
+    assert moscow[0]["items"][0]["time"] == "14:57 (Москва)"  # по умолчанию
+
+    assert (await client.put("/api/miniapp/settings/timezone", headers=headers, json={"timezone": "Нет/Такого"})).status_code == 400
+    saved = await client.put("/api/miniapp/settings/timezone", headers=headers, json={"timezone": "Asia/Yekaterinburg"})
+    assert saved.json() == {"quiet_timezone": "Asia/Yekaterinburg"}
+
+    local = (await client.get("/api/miniapp/schedule", headers=headers)).json()["days"]
+    assert local[0]["items"][0]["time"] == "16:57 (Екатеринбург)"
+
+    # Тихие часы без пояса (новый клиент) пояс не сбрасывают
+    await client.put("/api/miniapp/settings/quiet-hours", headers=headers, json={"enabled": True, "start": "23:00", "end": "08:00"})
+    assert (await client.get("/api/miniapp/me", headers=headers)).json()["quiet_timezone"] == "Asia/Yekaterinburg"
+
+
 async def test_admin_api(database, client, monkeypatch):
     async def fake_account(api_key, session):
         return (401, "Unauthorized") if api_key.startswith("bad") else (200, {"requestCount": 120, "requestLimit": 1000})

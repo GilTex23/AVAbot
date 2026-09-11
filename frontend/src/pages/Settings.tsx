@@ -4,11 +4,11 @@ import { Badge } from "../components/ui/badge";
 import { Button } from "../components/ui/button";
 import { Card } from "../components/ui/card";
 import { Switch } from "../components/ui/switch";
-import { saveQuietHours, saveVoiceover } from "../services/api";
+import { saveQuietHours, saveTimeZone, saveVoiceover } from "../services/api";
 import type { UserProfile } from "../lib/types";
 import { hapticNotification } from "../lib/telegram";
 import { voiceovers } from "../lib/utils";
-import { formatTimeZoneLabel, getTimeZones } from "../lib/timezones";
+import { DEFAULT_TIME_ZONE, formatTimeZoneLabel, getTimeZones } from "../lib/timezones";
 
 type SettingsProps = {
   user?: UserProfile | null;
@@ -21,19 +21,41 @@ export function Settings({ user, onUserUpdated, onOpenAdmin }: SettingsProps) {
   const [quietMode, setQuietMode] = useState(user?.quiet_hours_enabled || false);
   const [quietStart, setQuietStart] = useState(user?.quiet_hours_start || "23:00");
   const [quietEnd, setQuietEnd] = useState(user?.quiet_hours_end || "09:00");
-  const [timezone, setTimezone] = useState(user?.quiet_timezone || "Europe/Moscow");
+  const [timezone, setTimezone] = useState(user?.quiet_timezone || DEFAULT_TIME_ZONE);
   const [savingVoiceover, setSavingVoiceover] = useState(false);
+  const [savingTimezone, setSavingTimezone] = useState(false);
   const [savingQuiet, setSavingQuiet] = useState(false);
   const [notice, setNotice] = useState<string | null>(null);
-  const timeZones = useMemo(() => getTimeZones(), []);
+  const timeZones = useMemo(() => {
+    const zones = getTimeZones();
+    // Сохранённый пояс может не входить в список браузера (например, устаревшее имя) — показываем и его
+    return user?.quiet_timezone && !zones.includes(user.quiet_timezone) ? [user.quiet_timezone, ...zones] : zones;
+  }, [user?.quiet_timezone]);
+  const savedTimezone = user?.quiet_timezone || DEFAULT_TIME_ZONE;
 
   useEffect(() => {
     setVoiceover(user?.favorite_voiceover || "AniLiberty");
     setQuietMode(user?.quiet_hours_enabled || false);
     setQuietStart(user?.quiet_hours_start || "23:00");
     setQuietEnd(user?.quiet_hours_end || "09:00");
-    setTimezone(user?.quiet_timezone || "Europe/Moscow");
+    setTimezone(user?.quiet_timezone || DEFAULT_TIME_ZONE);
   }, [user]);
+
+  async function saveUserTimezone() {
+    setSavingTimezone(true);
+    setNotice(null);
+    try {
+      const result = await saveTimeZone(timezone);
+      onUserUpdated(user ? { ...user, quiet_timezone: result.quiet_timezone } : null);
+      hapticNotification("success");
+      setNotice("Часовой пояс сохранён.");
+    } catch {
+      hapticNotification("error");
+      setNotice("Не удалось сохранить часовой пояс.");
+    } finally {
+      setSavingTimezone(false);
+    }
+  }
 
   async function saveFavoriteVoiceover() {
     setSavingVoiceover(true);
@@ -59,7 +81,6 @@ export function Settings({ user, onUserUpdated, onOpenAdmin }: SettingsProps) {
         enabled: quietMode,
         start: quietStart,
         end: quietEnd,
-        timezone,
       });
       onUserUpdated(
         user
@@ -68,7 +89,6 @@ export function Settings({ user, onUserUpdated, onOpenAdmin }: SettingsProps) {
               quiet_hours_enabled: result.quiet_hours_enabled,
               quiet_hours_start: result.quiet_hours_start,
               quiet_hours_end: result.quiet_hours_end,
-              quiet_timezone: result.quiet_timezone,
             }
           : null,
       );
@@ -86,7 +106,7 @@ export function Settings({ user, onUserUpdated, onOpenAdmin }: SettingsProps) {
     <div className="page-stack">
       <section className="section-title">
         <h1>Настройки</h1>
-        <p>Профиль Telegram, озвучка и тихие часы</p>
+        <p>Профиль Telegram, озвучка, часовой пояс и тихие часы</p>
       </section>
 
       {notice ? <div className="notice">{notice}</div> : null}
@@ -131,6 +151,25 @@ export function Settings({ user, onUserUpdated, onOpenAdmin }: SettingsProps) {
       </Card>
 
       <Card className="settings-card settings-card--column">
+        <h2>Часовой пояс</h2>
+        <label className="field-stack">
+          <span>Время в расписании, прогнозах серий и тихих часах</span>
+          <select className="input select" value={timezone} onChange={(event) => setTimezone(event.target.value)}>
+            {timeZones.map((item) => (
+              <option key={item} value={item}>
+                {formatTimeZoneLabel(item)}
+              </option>
+            ))}
+          </select>
+        </label>
+        <p className="muted-copy">По умолчанию — Москва (Europe/Moscow, UTC+3).</p>
+        <Button variant="primary" disabled={savingTimezone} onClick={saveUserTimezone}>
+          {savingTimezone ? <Loader2 className="spin" size={17} /> : savedTimezone === timezone ? <Check size={17} /> : <Save size={17} />}
+          {savingTimezone ? "Сохраняю" : "Сохранить часовой пояс"}
+        </Button>
+      </Card>
+
+      <Card className="settings-card settings-card--column">
         <Switch checked={quietMode} onChange={setQuietMode} label="Тихие часы" />
         <div className="settings-grid">
           <label>
@@ -142,17 +181,7 @@ export function Settings({ user, onUserUpdated, onOpenAdmin }: SettingsProps) {
             <input className="input" type="time" value={quietEnd} onChange={(event) => setQuietEnd(event.target.value)} />
           </label>
         </div>
-        <label className="field-stack">
-          <span>Часовой пояс</span>
-          <select className="input select" value={timezone} onChange={(event) => setTimezone(event.target.value)}>
-            {timeZones.map((item) => (
-              <option key={item} value={item}>
-                {formatTimeZoneLabel(item)}
-              </option>
-            ))}
-          </select>
-        </label>
-        <p className="muted-copy">По умолчанию используется Europe/Moscow, то есть UTC+3.</p>
+        <p className="muted-copy">Время тихих часов — по вашему часовому поясу: {formatTimeZoneLabel(savedTimezone)}.</p>
         <Button variant="primary" disabled={savingQuiet} onClick={saveQuietSettings}>
           {savingQuiet ? <Loader2 className="spin" size={17} /> : <Save size={17} />}
           {savingQuiet ? "Сохраняю" : "Сохранить тихие часы"}

@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState } from "react";
 import { AppLayout } from "./components/layout/AppLayout";
 import type { TabId, UserProfile } from "./lib/types";
 import { bootTelegramShell, hapticNotification, isTelegramMiniApp, requestWriteAccessOnce, showTelegramAlert } from "./lib/telegram";
+import { safeTimeZone, TimeZoneContext } from "./lib/timezones";
 import { getProfile } from "./services/api";
 import { AccessGate } from "./pages/AccessGate";
 import { Admin } from "./pages/Admin";
@@ -61,14 +62,16 @@ export default function App() {
   }
 
   return (
-    <AppLayout activeTab={activeTab} user={user} refreshing={refreshing} onTabChange={changeTab} onRefresh={refresh}>
-      {activeTab === "updates" ? <Updates favoriteVoiceover={user?.favorite_voiceover || "AniLiberty"} refreshKey={refreshKey} /> : null}
-      {activeTab === "subscriptions" ? <Subscriptions refreshKey={refreshKey} /> : null}
-      {activeTab === "schedule" ? <Schedule refreshKey={refreshKey} /> : null}
-      {activeTab === "settings" && adminOpen && user?.is_admin ? <Admin refreshKey={refreshKey} onBack={closeAdmin} /> : null}
-      {activeTab === "settings" && !(adminOpen && user?.is_admin) ? (
-        <Settings user={user} onUserUpdated={setUser} onOpenAdmin={() => setAdminOpen(true)} />
-      ) : null}
-    </AppLayout>
+    <TimeZoneContext.Provider value={safeTimeZone(user?.quiet_timezone)}>
+      <AppLayout activeTab={activeTab} user={user} refreshing={refreshing} onTabChange={changeTab} onRefresh={refresh}>
+        {activeTab === "updates" ? <Updates favoriteVoiceover={user?.favorite_voiceover || "AniLiberty"} refreshKey={refreshKey} /> : null}
+        {activeTab === "subscriptions" ? <Subscriptions refreshKey={refreshKey} /> : null}
+        {activeTab === "schedule" ? <Schedule refreshKey={refreshKey} /> : null}
+        {activeTab === "settings" && adminOpen && user?.is_admin ? <Admin refreshKey={refreshKey} onBack={closeAdmin} /> : null}
+        {activeTab === "settings" && !(adminOpen && user?.is_admin) ? (
+          <Settings user={user} onUserUpdated={setUser} onOpenAdmin={() => setAdminOpen(true)} />
+        ) : null}
+      </AppLayout>
+    </TimeZoneContext.Provider>
   );
 }

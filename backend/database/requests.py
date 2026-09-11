@@ -80,6 +80,12 @@ async def update_user_quiet_hours(
         await session.commit()
 
 
+async def update_user_timezone(tg_id: int, timezone: str):
+    async with async_session() as session:
+        await session.execute(update(User).where(User.id == tg_id).values(quiet_timezone=timezone))
+        await session.commit()
+
+
 async def get_user_voiceover(tg_id: int):
     async with async_session() as session:
         user = await session.scalar(select(User).where(User.id == tg_id))

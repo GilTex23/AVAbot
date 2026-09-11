@@ -18,6 +18,7 @@ class User(Base):
     quiet_hours_enabled = Column(Boolean, nullable=False, default=False)
     quiet_hours_start = Column(String, nullable=False, default="23:00")
     quiet_hours_end = Column(String, nullable=False, default="09:00")
+    # Часовой пояс пользователя (исторически назван по тихим часам): расписание, прогнозы и тихие часы
     quiet_timezone = Column(String, nullable=False, default="Europe/Moscow")
     registered_at = Column(DateTime, default=datetime.datetime.utcnow)
 

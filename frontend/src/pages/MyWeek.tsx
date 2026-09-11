@@ -6,6 +6,7 @@ import { Button } from "../components/ui/button";
 import { Card } from "../components/ui/card";
 import { LazyImage } from "../components/ui/LazyImage";
 import { getMyWeek } from "../services/api";
+import { dayKey, useTimeZone } from "../lib/timezones";
 import type { WeekItem } from "../lib/types";
 import { openAnime } from "../lib/utils";
 
@@ -19,25 +20,22 @@ type WeekGroup = {
   items: WeekItem[];
 };
 
-function dayKey(date: Date) {
-  return `${date.getFullYear()}-${date.getMonth()}-${date.getDate()}`;
-}
+const DAY = 24 * 60 * 60 * 1000;
 
-function dayTitle(date: Date) {
-  const today = new Date();
-  const tomorrow = new Date(today.getFullYear(), today.getMonth(), today.getDate() + 1);
-  if (dayKey(date) === dayKey(today)) {
+function dayTitle(date: Date, timeZone: string) {
+  const now = new Date();
+  if (dayKey(date, timeZone) === dayKey(now, timeZone)) {
     return "Сегодня";
   }
-  if (dayKey(date) === dayKey(tomorrow)) {
+  if (dayKey(date, timeZone) === dayKey(new Date(now.getTime() + DAY), timeZone)) {
     return "Завтра";
   }
-  const title = date.toLocaleDateString("ru-RU", { weekday: "long", day: "numeric", month: "long" });
+  const title = date.toLocaleDateString("ru-RU", { weekday: "long", day: "numeric", month: "long", timeZone });
   return title.charAt(0).toUpperCase() + title.slice(1);
 }
 
-/** Задерживающиеся — сверху, остальное по дням (в часовом поясе устройства) */
-function groupByDay(items: WeekItem[]): WeekGroup[] {
+/** Задерживающиеся — сверху, остальное по дням в поясе пользователя */
+function groupByDay(items: WeekItem[], timeZone: string): WeekGroup[] {
   const groups: WeekGroup[] = [];
   const overdue = items.filter((item) => item.forecast.overdue);
   if (overdue.length) {
@@ -45,22 +43,23 @@ function groupByDay(items: WeekItem[]): WeekGroup[] {
   }
   for (const item of items.filter((entry) => !entry.forecast.overdue)) {
     const date = new Date(item.forecast.expected_at);
-    const key = dayKey(date);
+    const key = dayKey(date, timeZone);
     const group = groups.find((entry) => entry.key === key);
     if (group) {
       group.items.push(item);
     } else {
-      groups.push({ key, title: dayTitle(date), items: [item] });
+      groups.push({ key, title: dayTitle(date, timeZone), items: [item] });
     }
   }
   return groups;
 }
 
 export function MyWeek({ refreshKey }: MyWeekProps) {
+  const timeZone = useTimeZone();
   const [items, setItems] = useState<WeekItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [notice, setNotice] = useState<string | null>(null);
-  const groups = useMemo(() => groupByDay(items), [items]);
+  const groups = useMemo(() => groupByDay(items, timeZone), [items, timeZone]);
 
   useEffect(() => {
     let cancelled = false;
