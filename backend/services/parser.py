@@ -236,6 +236,21 @@ async def get_html(url: str, session: aiohttp.ClientSession = None, bot: Bot=Non
 # а в расписании время приводится к московскому.
 MSK = ZoneInfo("Europe/Moscow")
 
+USER_TIMEZONE_LABELS = {
+    "Europe/Kaliningrad": "Калининград",
+    "Europe/Moscow": "Москва",
+    "Europe/Samara": "Самара",
+    "Asia/Yekaterinburg": "Екатеринбург",
+    "Asia/Omsk": "Омск",
+    "Asia/Novosibirsk": "Новосибирск",
+    "Asia/Krasnoyarsk": "Красноярск",
+    "Asia/Irkutsk": "Иркутск",
+    "Asia/Yakutsk": "Якутск",
+    "Asia/Vladivostok": "Владивосток",
+    "Asia/Magadan": "Магадан",
+    "Asia/Kamchatka": "Камчатка",
+}
+
 MONTHS_GENITIVE = {
     'января': 1, 'февраля': 2, 'марта': 3, 'апреля': 4, 'мая': 5, 'июня': 6,
     'июля': 7, 'августа': 8, 'сентября': 9, 'октября': 10, 'ноября': 11, 'декабря': 12,
@@ -515,14 +530,25 @@ def zone_or_moscow(name: str | None) -> ZoneInfo:
         return MSK
 
 
+# def timezone_display_label(zone: ZoneInfo) -> str:
+#     """Подпись пояса для времени в расписании: «Екатеринбург», если есть короткое русское название, иначе «UTC+5»"""
+#     if zone.key == "Europe/Moscow":
+#         return "Москва"
+#     for label, zone_name in TIMEZONE_LABELS.items():
+#         if zone_name == zone.key and "," not in label:
+#             return label
+#     return timezone_alerts.format_offset(datetime.datetime.now(zone).utcoffset())
+
 def timezone_display_label(zone: ZoneInfo) -> str:
-    """Подпись пояса для времени в расписании: «Екатеринбург», если есть короткое русское название, иначе «UTC+5»"""
-    if zone.key == "Europe/Moscow":
-        return "Москва"
-    for label, zone_name in TIMEZONE_LABELS.items():
-        if zone_name == zone.key and "," not in label:
-            return label
-    return timezone_alerts.format_offset(datetime.datetime.now(zone).utcoffset())
+    """Подпись часового пояса пользователя."""
+    label = USER_TIMEZONE_LABELS.get(zone.key)
+
+    if label:
+        return label
+
+    return timezone_alerts.format_offset(
+        datetime.datetime.now(zone).utcoffset()
+    )
 
 
 def localize_schedule(schedule_days: list, zone: ZoneInfo) -> list:
