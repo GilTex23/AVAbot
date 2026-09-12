@@ -68,7 +68,7 @@ async def lifespan(app: FastAPI):
         logger.info("New webhook has been installed")
     logger.info("Webhook ready")
 
-    scheduler.add_job(check_updates, "interval", minutes=20, args=[bot], id="updates_checker", replace_existing=True)
+    scheduler.add_job(check_updates, "interval", minutes=15, args=[bot], id="updates_checker", replace_existing=True)
     scheduler.add_job(check_subscriptions_status, "cron", hour=21, minute=0, args=[bot], id="subscriptions_status_checker", replace_existing=True)
     # /account не тратит кредиты; первый опрос сразу после старта
     scheduler.add_job(scraper_keys.refresh_all_keys, "interval", hours=6, args=[bot], id="scraper_keys_refresh", replace_existing=True, next_run_time=datetime.now())

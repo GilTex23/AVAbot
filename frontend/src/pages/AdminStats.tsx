@@ -281,7 +281,7 @@ function StatsContent({ data, labels, timeZone }: { data: AdminStatsData; labels
         </ChartCard>
       </Section>
 
-      <Section title="Парсер AnimeGO" subtitle="Результат каждой загрузки главной (раз в 20 минут)">
+      <Section title="Парсер AnimeGO" subtitle="Результат каждой загрузки главной (раз в 15 минут)">
         <ChartCard title="Загрузки главной" legend={legendOf(homeResults)} empty={sumSeries(data.parser.home_results) ? null : NO_DATA}>
           {(mode) => <BarChart labels={labels} series={homeResults} mode={mode} />}
         </ChartCard>

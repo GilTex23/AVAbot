@@ -12,9 +12,11 @@ AnimeGO называет некоторые пояса по-своему («Са
 """
 
 TIMEZONE_LABELS = {
+    'Австрия': 'Europe/Kaliningrad',
     'Азербайджан': 'Asia/Baku',
     'Азорские о-ва': 'Atlantic/Azores',
     'Акри время': 'America/Eirunepe',
+    'Алматы': 'Asia/Yekaterinburg',
     'Аляска': 'America/Anchorage',
     'Амазонка': 'America/Boa_Vista',
     'Антарктида (Восток), летнее время': 'Antarctica/Vostok',
@@ -131,6 +133,7 @@ TIMEZONE_LABELS = {
     'Маршалловы о-ва (Кваджалейн), летнее время': 'Pacific/Kwajalein',
     'Маршалловы о-ва (Маджуро), летнее время': 'Pacific/Majuro',
     'Мозамбик, летнее время': 'Africa/Maputo',
+    'Молдова': 'Europe/Moscow',
     'Москва': 'Europe/Moscow',
     'Мьянма (Бирма), летнее время': 'Asia/Rangoon',
     'Намибия, летнее время': 'Africa/Windhoek',
