@@ -25,6 +25,12 @@ try:
     # ScraperAPI рекомендует ждать ответа не меньше 60–70 секунд
     SCRAPER_API_TIMEOUT_SECONDS = float(os.getenv("SCRAPER_API_TIMEOUT_SECONDS", "70"))
     MINIAPP_DEV_AUTH_ENABLED = os.getenv("MINIAPP_DEV_AUTH_ENABLED", "false").lower() in ("1", "true", "yes", "on")
+    # Публичный HTTPS-адрес мини-аппа: кнопка «Открыть приложение» в боте и кнопка меню чата.
+    # Пусто — бот работает только через меню в чате, кнопку меню не трогает
+    MINIAPP_URL = os.getenv("MINIAPP_URL", "").strip()
+    if MINIAPP_URL and not MINIAPP_URL.startswith("https://"):
+        logger.warning("MINIAPP_URL must start with https:// — Telegram opens mini apps only over HTTPS; ignoring it")
+        MINIAPP_URL = ""
 
     # Шифрует ключи ScraperAPI в БД. Если его поменять, сохранённые ключи перестанут расшифровываться
     SCRAPER_KEYS_SECRET = os.getenv("SCRAPER_KEYS_SECRET", "")

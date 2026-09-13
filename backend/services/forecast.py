@@ -14,7 +14,7 @@ import logging
 from collections import defaultdict
 
 from database import requests as db
-from services import voiceovers
+from services import anime_titles, voiceovers
 from services.parser import max_episode_number, parse_episode_list
 from services.voiceovers import ALL_VOICEOVERS, matches as voiceover_matches
 
@@ -91,6 +91,8 @@ async def record_home(home: dict, subscriptions) -> None:
 
     await db.record_episode_releases(list(releases.values()))
     await voiceovers.remember(release["studio"] for release in releases.values())
+    schedule_items = [item for day in home.get("schedule") or [] for item in day.get("items") or []]
+    await anime_titles.remember([*(home.get("updates") or []), *schedule_items])
     await db.record_episode_airings(list(airings.values()))
 
     missing_totals = {sub.anime_url for sub in subscriptions if sub.total_episodes is None}

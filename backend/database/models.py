@@ -27,6 +27,17 @@ class User(Base):
     subscriptions = relationship("Subscription", back_populates="user", cascade="all, delete-orphan")
 
 
+class AnimeTitle(Base):
+    """Тайтлы AnimeGO по числовому id из конца адреса: для ссылок t.me/бот?start=a<id> и будущих источников"""
+    __tablename__ = 'anime_titles'
+
+    id = Column(Integer, primary_key=True, autoincrement=False)
+    url = Column(String, nullable=False, unique=True)
+    title = Column(String, nullable=False)
+    poster_url = Column(String, nullable=True)
+    updated_at = Column(DateTime, nullable=False, default=datetime.datetime.utcnow)
+
+
 class Voiceover(Base):
     """Справочник озвучек: пополняется сам — из ленты свежих серий и со страниц тайтлов"""
     __tablename__ = 'voiceovers'

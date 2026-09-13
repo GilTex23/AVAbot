@@ -1,4 +1,4 @@
-import { Check, Clock, ExternalLink, Loader2, Plus, Search, X } from "lucide-react";
+import { Check, Clock, ExternalLink, Loader2, Plus, Search, Share2, X } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { Badge } from "../components/ui/badge";
 import { Button } from "../components/ui/button";
@@ -9,7 +9,7 @@ import { addScheduleSubscription, errorText, getAnimeDetails, getSchedule, getSu
 import type { AnimeDetails, ScheduleDay, ScheduleItem, SubscriptionItem } from "../lib/types";
 import { buildSubscriptionIndex, normalizeAnimeLink, subscriptionKey } from "../lib/subscriptions";
 import { hapticNotification } from "../lib/telegram";
-import { openAnime } from "../lib/utils";
+import { openAnime, shareTitle, titleDeepLink } from "../lib/utils";
 import { MyWeek } from "./MyWeek";
 
 type ScheduleProps = {
@@ -232,9 +232,16 @@ function FullSchedule({ refreshKey }: ScheduleProps) {
                 <h2>{modal.item.title}</h2>
                 <p>Выберите озвучку для подписки</p>
               </div>
-              <Button size="icon" variant="ghost" aria-label="Закрыть" onClick={() => setModal(null)}>
-                <X size={18} />
-              </Button>
+              <div className="modal-card__actions">
+                {titleDeepLink(modal.item.link) ? (
+                  <Button size="icon" variant="ghost" aria-label="Поделиться" onClick={() => shareTitle(modal.item.link, modal.item.title)}>
+                    <Share2 size={18} />
+                  </Button>
+                ) : null}
+                <Button size="icon" variant="ghost" aria-label="Закрыть" onClick={() => setModal(null)}>
+                  <X size={18} />
+                </Button>
+              </div>
             </div>
             <div className="voiceover-list">
               {modal.details.voiceovers.map((voiceover) => (

@@ -16,6 +16,7 @@ type TelegramWebApp = {
   setHeaderColor?: (color: string) => void;
   setBackgroundColor?: (color: string) => void;
   openLink?: (url: string, options?: { try_instant_view?: boolean }) => void;
+  openTelegramLink?: (url: string) => void;
   showAlert?: (message: string, callback?: () => void) => void;
   requestWriteAccess?: (callback?: (granted: boolean) => void) => void;
   HapticFeedback?: {
@@ -98,6 +99,16 @@ export function openTelegramLink(url: string) {
     return;
   }
   window.open(url, "_blank", "noopener,noreferrer");
+}
+
+/** Ссылки t.me внутри Telegram открываются без браузера: окно «Поделиться», чат с ботом */
+export function openTelegramChatLink(url: string) {
+  const app = getTelegramWebApp();
+  if (app?.openTelegramLink) {
+    app.openTelegramLink(url);
+    return;
+  }
+  openTelegramLink(url);
 }
 
 export function showTelegramAlert(message: string) {

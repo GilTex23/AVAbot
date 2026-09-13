@@ -1,5 +1,7 @@
-from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton
+from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton, WebAppInfo
 from aiogram.utils.keyboard import InlineKeyboardBuilder
+
+import config
 
 
 FAVORITES_PAGE_SIZE = 10
@@ -8,13 +10,43 @@ FAVORITES_ONBOARDING = "o"
 FAVORITES_SETTINGS = "s"
 
 
+APP_BUTTON_TEXT = "📱 Открыть приложение"
+
+
+def _add_app_button(kb: InlineKeyboardBuilder) -> bool:
+    """Кнопка мини-аппа, если задан MINIAPP_URL; True — если добавлена"""
+    if not config.MINIAPP_URL:
+        return False
+    kb.button(text=APP_BUTTON_TEXT, web_app=WebAppInfo(url=config.MINIAPP_URL))
+    return True
+
+
 def main_menu(has_favorites: bool = False):
     kb = InlineKeyboardBuilder()
+    _add_app_button(kb)
     kb.button(text="🔥 Свежие серии (любимые)" if has_favorites else "🔥 Свежие серии (все озвучки)", callback_data="get_updates_default")
     kb.button(text="🎙 Другая озвучка", callback_data="select_other_vo")
     kb.button(text="📅 Расписание (Добавить)", callback_data="open_schedule")
     kb.button(text="📋 Мои подписки", callback_data="my_subs")
     kb.button(text="⚙️ Любимые озвучки", callback_data="settings")
+    kb.adjust(1)
+    return kb.as_markup()
+
+
+def welcome():
+    """После первого /start: приложение, меню в чате или сразу любимые озвучки"""
+    kb = InlineKeyboardBuilder()
+    _add_app_button(kb)
+    kb.button(text="💬 Меню в чате", callback_data="back_home")
+    kb.button(text="🎙 Выбрать любимые озвучки", callback_data=f"fav:p:0:{FAVORITES_ONBOARDING}")
+    kb.adjust(1)
+    return kb.as_markup()
+
+
+def open_app():
+    kb = InlineKeyboardBuilder()
+    _add_app_button(kb)
+    kb.button(text="💬 Меню в чате", callback_data="back_home")
     kb.adjust(1)
     return kb.as_markup()
 
@@ -177,7 +209,7 @@ def schedule_day_view(day_index: int, total_days: int, items_count: int):
     return kb.as_markup()
 
 
-def anime_voiceovers_list(voiceovers: list):
+def anime_voiceovers_list(voiceovers: list, url: str | None = None):
     """
     Кнопки выбора озвучки (для нового сообщения).
     """
@@ -187,7 +219,12 @@ def anime_voiceovers_list(voiceovers: list):
         kb.button(text=vo, callback_data=f"sched_sub_vo:{index}")
 
     kb.adjust(2)
-    kb.attach(InlineKeyboardBuilder().button(text="❌ Отмена", callback_data="close_message"))
+    controls = InlineKeyboardBuilder()
+    if url:
+        controls.button(text="🔗 Открыть на AnimeGO", url=url)
+    controls.button(text="❌ Отмена", callback_data="close_message")
+    controls.adjust(1)
+    kb.attach(controls)
     return kb.as_markup()
 
 

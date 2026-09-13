@@ -12,7 +12,7 @@ from fastapi import APIRouter, Depends, HTTPException, Request, status
 import config
 from database import requests as db
 from loader import bot
-from services import forecast, parser, stats, voiceovers
+from services import anime_titles, forecast, parser, stats, voiceovers
 from services.subscription_rules import subscription_block_reason
 
 logger = logging.getLogger(__name__)
@@ -214,6 +214,7 @@ async def add_subscription(payload: dict, current_user: dict = Depends(get_minia
     )
     if created:
         await stats.increment("subscriptions.created", stats.SOURCE_MINIAPP)
+        await anime_titles.remember([{"title": title, "link": link, "poster_url": poster_url}])
     return {"ok": True, "created": created}
 
 

@@ -28,7 +28,7 @@ from middlewares.callback import CallbackAnswerMiddleware
 from services.logger import setup_logger
 from services.checker import check_updates, check_subscriptions_status
 from services.notifier import notify_admins
-from services import scraper_keys, stats
+from services import bot_setup, scraper_keys, stats
 from database.requests import init_db, engine
 
 from services.admin_panel import authentication_backend, UserAdmin, SubscriptionAdmin
@@ -67,6 +67,9 @@ async def lifespan(app: FastAPI):
         )
         logger.info("New webhook has been installed")
     logger.info("Webhook ready")
+
+    # Команды в меню «/» и кнопка мини-аппа у поля ввода
+    await bot_setup.configure_bot(bot)
 
     scheduler.add_job(check_updates, "interval", minutes=15, args=[bot], id="updates_checker", replace_existing=True)
     scheduler.add_job(check_subscriptions_status, "cron", hour=21, minute=0, args=[bot], id="subscriptions_status_checker", replace_existing=True)

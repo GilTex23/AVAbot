@@ -59,7 +59,7 @@ def no_stats_writes_without_database(request, monkeypatch):
     async def skip(*args, **kwargs):
         return None
 
-    for name in ("increment_daily_stats", "record_user_activity", "add_key_snapshots", "touch_voiceovers"):
+    for name in ("increment_daily_stats", "record_user_activity", "add_key_snapshots", "touch_voiceovers", "upsert_anime_titles"):
         monkeypatch.setattr(db, name, skip)
 
 
@@ -87,7 +87,7 @@ async def database(migrated_database):
     async with db.engine.begin() as conn:
         await conn.execute(text(
             "TRUNCATE episode_releases, episode_airings, scraper_api_key_usage, scraper_key_snapshots, scraper_api_keys, "
-            "daily_stats, user_activity, subscriptions, users, voiceovers RESTART IDENTITY CASCADE"
+            "daily_stats, user_activity, subscriptions, users, voiceovers, anime_titles RESTART IDENTITY CASCADE"
         ))
     await key_pool.reload()
     yield db

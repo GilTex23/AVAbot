@@ -1,4 +1,4 @@
-import { ExternalLink, Loader2, Trash2 } from "lucide-react";
+import { ExternalLink, Loader2, Share2, Trash2 } from "lucide-react";
 import { useEffect, useState } from "react";
 import { NextEpisode } from "../components/NextEpisode";
 import { Badge } from "../components/ui/badge";
@@ -8,7 +8,7 @@ import { LazyImage } from "../components/ui/LazyImage";
 import { deleteSubscription, getSubscriptions } from "../services/api";
 import type { SubscriptionItem } from "../lib/types";
 import { hapticNotification } from "../lib/telegram";
-import { openAnime } from "../lib/utils";
+import { openAnime, shareTitle, titleDeepLink } from "../lib/utils";
 
 type SubscriptionsProps = {
   refreshKey: number;
@@ -91,6 +91,11 @@ export function Subscriptions({ refreshKey }: SubscriptionsProps) {
                 {item.next_episode ? <NextEpisode forecast={item.next_episode} /> : null}
               </div>
               <div className="subscription-row__actions">
+                {titleDeepLink(item.link) ? (
+                  <Button size="icon" variant="ghost" aria-label="Поделиться" onClick={() => shareTitle(item.link, item.title)}>
+                    <Share2 size={18} />
+                  </Button>
+                ) : null}
                 <Button size="icon" variant="ghost" aria-label="Открыть" onClick={() => openAnime(item.link)}>
                   <ExternalLink size={18} />
                 </Button>

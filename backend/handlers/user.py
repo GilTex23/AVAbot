@@ -1,5 +1,5 @@
 from aiogram import Router, F, types
-from aiogram.filters import CommandStart, StateFilter
+from aiogram.filters import Command, CommandObject, CommandStart, StateFilter
 from aiogram.fsm.context import FSMContext
 from aiogram.exceptions import TelegramBadRequest
 from contextlib import suppress
@@ -7,7 +7,8 @@ import html
 
 from database import requests as db
 from keyboards import inline
-from services import parser, stats, voiceovers
+import config
+from services import anime_titles, parser, stats, voiceovers
 from services.subscription_rules import subscription_block_reason
 from utils.states import UpdatesState, ScheduleState
 import logging
@@ -97,22 +98,116 @@ async def show_updates_for_vo(message: types.Message, state: FSMContext, names: 
     )
 
 
-# --- СТАРТ ---
+# --- СТАРТ И КОМАНДЫ ---
+HELP_TEXT = (
+    "🤖 <b>Что я умею</b>\n"
+    "Слежу за новыми сериями аниме в озвучке с AnimeGO и пишу, когда на ваших подписках выходит серия.\n\n"
+    "/menu — меню в чате\n"
+    "/updates — свежие серии любимых озвучек\n"
+    "/schedule — расписание, отсюда можно подписаться\n"
+    "/subs — мои подписки\n"
+    "/voiceovers — любимые озвучки\n"
+    "/app — открыть приложение\n"
+    "/help — эта справка\n\n"
+    "Ссылкой на тайтл можно поделиться: тот, кто её откроет, сразу увидит выбор озвучки для подписки."
+)
+
+
+def welcome_text(first_name: str | None) -> str:
+    lines = [
+        f"👋 Привет, {html.escape(first_name or '')}!",
+        "",
+        "Я слежу за новыми сериями аниме в озвучке с AnimeGO и пишу, когда на ваших подписках выходит серия.",
+        "",
+    ]
+    if config.MINIAPP_URL:
+        lines.append("Удобнее всего — в приложении: свежие серии, расписание, подписки и прогноз выхода. "
+                     "Всё то же можно делать и здесь, в чате.")
+    else:
+        lines.append("Свежие серии, расписание и подписки — в меню ниже.")
+    lines += ["", "<i>Любимые озвучки можно выбрать сейчас или позже — пока показываю все.</i>"]
+    return "\n".join(lines)
+
+
 @router.message(CommandStart())
-async def cmd_start(message: types.Message, state: FSMContext):
+async def cmd_start(message: types.Message, state: FSMContext, command: CommandObject):
     await state.clear()
 
     is_new_user = await db.add_user(message.from_user.id, message.from_user.username)
 
+    # Ссылка на тайтл: t.me/бот?start=a3484
+    anime_id = anime_titles.parse_payload(command.args)
+    if anime_id is not None:
+        if is_new_user:
+            await message.answer(welcome_text(message.from_user.first_name), reply_markup=inline.welcome(), parse_mode="HTML")
+        await open_title(message, state, anime_id)
+        return
+
     if is_new_user:
-        text, kb = await favorites_screen(message.from_user.id, page=0, context=inline.FAVORITES_ONBOARDING)
-        await message.answer(
-            f"👋 Привет, {html.escape(message.from_user.first_name or '')}!\n\n" + text,
-            reply_markup=kb,
-            parse_mode="HTML"
-        )
+        await message.answer(welcome_text(message.from_user.first_name), reply_markup=inline.welcome(), parse_mode="HTML")
     else:
         await render_main_menu(message, message.from_user.id, is_edit=False)
+
+
+@router.message(Command("menu"))
+async def cmd_menu(message: types.Message, state: FSMContext):
+    await state.clear()
+    await db.add_user(message.from_user.id, message.from_user.username)
+    await render_main_menu(message, message.from_user.id, is_edit=False)
+
+
+@router.message(Command("help"))
+async def cmd_help(message: types.Message):
+    await message.answer(HELP_TEXT, reply_markup=inline.open_app(), parse_mode="HTML")
+
+
+@router.message(Command("app"))
+async def cmd_app(message: types.Message):
+    if not config.MINIAPP_URL:
+        await message.answer("📱 Приложение пока не подключено. Всё доступно в меню: /menu")
+        return
+    await message.answer("📱 Свежие серии, расписание, подписки и прогноз выхода серий:", reply_markup=inline.open_app())
+
+
+@router.message(Command("updates"))
+async def cmd_updates(message: types.Message, state: FSMContext):
+    await db.add_user(message.from_user.id, message.from_user.username)
+    favorites = await db.get_user_favorite_voiceovers(message.from_user.id)
+    msg = await message.answer("⏳ <b>Загружаю обновления...</b>", parse_mode="HTML")
+    await show_updates_for_vo(msg, state, favorites, voiceovers.describe(favorites))
+
+
+@router.message(Command("schedule"))
+async def cmd_schedule(message: types.Message, state: FSMContext):
+    await db.add_user(message.from_user.id, message.from_user.username)
+    msg = await message.answer("⏳ <b>Загружаю расписание аниме...</b>", parse_mode="HTML")
+    await load_schedule(msg, message.from_user.id, state)
+
+
+@router.message(Command("subs"))
+async def cmd_subs(message: types.Message):
+    await db.add_user(message.from_user.id, message.from_user.username)
+    await render_subscriptions(message, message.from_user.id, is_edit=False)
+
+
+@router.message(Command("voiceovers"))
+async def cmd_voiceovers(message: types.Message):
+    await db.add_user(message.from_user.id, message.from_user.username)
+    text, kb = await favorites_screen(message.from_user.id, page=0, context=inline.FAVORITES_SETTINGS)
+    await message.answer(text, reply_markup=kb, parse_mode="HTML")
+
+
+async def open_title(message: types.Message, state: FSMContext, anime_id: int):
+    """Тайтл по ссылке: название из anime_titles, дальше — выбор озвучки, как из расписания"""
+    title = await db.get_anime_title(anime_id)
+    if title is None:
+        await message.answer(
+            "🔍 Не нашёл этот тайтл: он ещё не появлялся в ленте или расписании. Попробуйте найти его в /schedule.",
+            reply_markup=inline.back_button(),
+        )
+        return
+    msg = await message.answer(f"📺 <b>{html.escape(title.title)}</b>\n🔍 Загружаю озвучки...", parse_mode="HTML")
+    await offer_voiceovers(msg, state, title.title, title.url, message.bot)
 
 
 @router.callback_query(F.data == "back_home")
@@ -288,6 +383,7 @@ async def cb_add_from_list(callback: types.CallbackQuery, state: FSMContext):
     )
     if success:
         await stats.increment("subscriptions.created", stats.SOURCE_BOT)
+        await anime_titles.remember([anime])
 
     if success:
         total_str = info['total_episodes'] if info['total_episodes'] else "?"
@@ -353,23 +449,28 @@ async def cb_open_schedule(callback: types.CallbackQuery, state: FSMContext):
     except TelegramBadRequest:
         pass
 
-    schedule_days = await parser.get_schedule(callback.bot)
+    await load_schedule(callback.message, callback.from_user.id, state)
+
+
+async def load_schedule(message: types.Message, user_id: int, state: FSMContext):
+    """Загружает расписание и показывает первый день в сообщении message (оно редактируется)"""
+    schedule_days = await parser.get_schedule(message.bot)
 
     if schedule_days is None:
-        await callback.message.edit_text(
+        await message.edit_text(
             "⚠️ Ошибка получения расписания. Попробуйте позже.",
             reply_markup=inline.back_button()
         )
         return
 
     # Время и дни — в часовом поясе из настроек мини-аппа (по умолчанию Москва)
-    user = await db.get_user(callback.from_user.id)
+    user = await db.get_user(user_id)
     schedule_days = parser.localize_schedule(schedule_days, parser.zone_or_moscow(user.quiet_timezone if user else None))
 
     await state.update_data(schedule_days=schedule_days, current_day_index=0)
     await state.set_state(ScheduleState.viewing_schedule)
 
-    await render_schedule_day(callback.message, state)
+    await render_schedule_day(message, state)
 
 
 # --- НАВИГАЦИЯ ПО ДНЯМ ---
@@ -399,39 +500,45 @@ async def cb_schedule_item_select(callback: types.CallbackQuery, state: FSMConte
 
     await callback.answer(f"🔍 {anime['title']}...", cache_time=2)
     msg = await callback.message.answer("🔍 Проверяю статус аниме...")
+    await offer_voiceovers(msg, state, anime['title'], anime['link'], callback.bot)
 
-    info = await parser.get_anime_details(anime['link'], callback.bot)
+
+async def offer_voiceovers(msg: types.Message, state: FSMContext, title: str, url: str, bot):
+    """Страница тайтла -> проверка правила подписки -> кнопки озвучек в msg (из расписания и по ссылке)"""
+    safe_title = html.escape(title)
+    info = await parser.get_anime_details(url, bot)
 
     if not info:
-        await callback.answer("❌ Ошибка получения данных", show_alert=True)
-        await msg.edit_text("❌ Ошибка получения данных")
+        await msg.edit_text("❌ Не удалось получить данные о тайтле. Попробуйте позже.")
         return
 
-    # 2. Проверки (то же правило, что в мини-аппе; из расписания подписка начинается с серии 0)
+    # Проверки (то же правило, что в мини-аппе; серия озвучки ещё не выбрана — считаем с серии 0)
     reason = subscription_block_reason(info, "Серия 0")
     if reason:
         await msg.edit_text(
-            f"⛔️ Нельзя добавить <b>{anime['title']}</b>.\nПричина: {reason}",
+            f"⛔️ Нельзя добавить <b>{safe_title}</b>.\nПричина: {reason}",
             parse_mode="HTML"
         )
         return
 
     anime_voiceovers = info.get('available_voiceovers', [])
     if not anime_voiceovers:
-        await msg.edit_text(f"⚠️ Нет озвучек для <b>{anime['title']}</b>.", parse_mode="HTML")
+        await msg.edit_text(f"⚠️ Нет озвучек для <b>{safe_title}</b>.", parse_mode="HTML")
         return
 
     await state.update_data(
-        selected_anime_title=anime['title'],
-        selected_anime_url=anime['link'],
+        selected_anime_title=title,
+        selected_anime_url=url,
         selected_anime_total=info['total_episodes'],
         selected_anime_voiceovers=anime_voiceovers,
     )
 
+    total = info['total_episodes'] or "?"
     await msg.edit_text(
-        f"📺 <b>{anime['title']}</b>\n"
+        f"📺 <b>{safe_title}</b>\n"
+        f"📊 Серий: {total}\n"
         f"👇 Выберите озвучку для подписки:",
-        reply_markup=inline.anime_voiceovers_list(anime_voiceovers),
+        reply_markup=inline.anime_voiceovers_list(anime_voiceovers, url),
         parse_mode="HTML"
     )
 
@@ -453,11 +560,14 @@ async def cb_schedule_sub_finalize(callback: types.CallbackQuery, state: FSMCont
         await callback.message.delete()
         return
 
+    # Уже вышедшие в озвучке серии не присылаем: подписка начинается с последней серии из истории ленты
+    releases = await db.get_episode_releases({url})
+    last_known = max((release.episode for release in releases if voiceovers.matches(vo, release.studio)), default=None)
     success = await db.add_subscription(
         tg_id=callback.from_user.id,
         title=title,
         url=url,
-        last_ep="Серия 0",
+        last_ep=f"Серия {last_known or 0}",
         voiceover=vo,
         total_eps=total_eps
     )
@@ -466,11 +576,12 @@ async def cb_schedule_sub_finalize(callback: types.CallbackQuery, state: FSMCont
 
     if success:
         await stats.increment("subscriptions.created", stats.SOURCE_BOT)
+        await anime_titles.remember([{"title": title, "link": url}])
         await callback.message.edit_text(
             f"✅ <b>Подписка оформлена!</b>\n\n"
-            f"📺 {title}\n"
-            f"🎙 {vo}\n"
-            f"📊 Эпизоды: ? / {total_str}",
+            f"📺 {html.escape(title)}\n"
+            f"🎙 {html.escape(vo)}\n"
+            f"📊 Эпизоды: {last_known or '?'} / {total_str}",
             parse_mode="HTML"
         )
     else:
@@ -487,10 +598,15 @@ async def cb_close_message(callback: types.CallbackQuery):
 @router.callback_query(F.data == "my_subs")
 async def cb_my_subs(callback: types.CallbackQuery):
     await callback.answer("📋 Загружаю подписки...")
-    subs = await db.get_user_subscriptions(callback.from_user.id)
+    await render_subscriptions(callback.message, callback.from_user.id, is_edit=True)
+
+
+async def render_subscriptions(message: types.Message, user_id: int, is_edit: bool):
+    subs = await db.get_user_subscriptions(user_id)
+    send = message.edit_text if is_edit else message.answer
 
     if not subs:
-        await callback.message.edit_text(
+        await send(
             "📭 <b>У вас пока нет подписок.</b>\n"
             "Добавьте аниме через расписание или список свежих серий.",
             reply_markup=inline.back_button(),
@@ -511,7 +627,7 @@ async def cb_my_subs(callback: types.CallbackQuery):
 
     text_lines.append("\n<i>Нажмите на кнопку с номером, чтобы удалить подписку.</i>")
 
-    await callback.message.edit_text(
+    await send(
         "\n".join(text_lines),
         reply_markup=inline.subs_list_actions(subs),
         parse_mode="HTML",
@@ -522,6 +638,9 @@ async def cb_my_subs(callback: types.CallbackQuery):
 @router.callback_query(F.data.startswith("unsub_"))
 async def cb_unsubscribe(callback: types.CallbackQuery):
     sub_id = int(callback.data.split("unsub_")[1])
+    if not any(sub.id == sub_id for sub in await db.get_user_subscriptions(callback.from_user.id)):
+        await callback.answer("⚠️ Подписка не найдена", show_alert=True)
+        return
 
     await db.delete_subscription(sub_id)
     await stats.increment("subscriptions.deleted", stats.SOURCE_BOT)

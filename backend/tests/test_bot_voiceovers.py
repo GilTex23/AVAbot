@@ -30,10 +30,11 @@ class RecordingSession(BaseSession):
     async def make_request(self, bot, method, timeout=None):
         self.calls.append(method)
         if isinstance(method, (SendMessage, EditMessageText)):
+            # Как ответ настоящего Telegram: сообщение привязано к боту, его можно редактировать
             return Message(
                 message_id=1, date=dt.datetime.now(), chat=Chat(id=USER_ID, type="private"),
                 text=method.text, reply_markup=method.reply_markup,
-            )
+            ).as_(bot)
         return True
 
     async def stream_content(self, *args, **kwargs):
@@ -91,10 +92,14 @@ async def test_start_and_favorites_flow(database, telegram):
 
     await send("/start")
     welcome = session.last(SendMessage)
-    assert "Любимые озвучки" in welcome.text and "Все озвучки" in welcome.text
-    assert buttons(welcome)[-1].text == "✅ Готово"
+    assert "Привет, Тест" in welcome.text and "показываю все" in welcome.text
+    assert [item.text for item in buttons(welcome)] == ["💬 Меню в чате", "🎙 Выбрать любимые озвучки"]
 
-    await press(button(welcome, "AniLiberty").callback_data)
+    await press(button(welcome, "🎙 Выбрать любимые озвучки").callback_data)
+    onboarding = session.last(EditMessageText)
+    assert "Любимые озвучки" in onboarding.text and buttons(onboarding)[-1].text == "✅ Готово"
+
+    await press(button(onboarding, "AniLiberty").callback_data)
     assert await database.get_user_favorite_voiceovers(USER_ID) == ["AniLiberty"]
     marked = session.last(EditMessageText)
     assert "✅ AniLiberty" in [item.text for item in buttons(marked)] and "Сейчас: <b>AniLiberty</b>" in marked.text

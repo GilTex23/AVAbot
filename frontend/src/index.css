@@ -797,6 +797,12 @@ input[type="time"].input::-webkit-calendar-picker-indicator {
   gap: 12px;
 }
 
+.modal-card__actions {
+  display: flex;
+  flex: 0 0 auto;
+  gap: 4px;
+}
+
 .modal-card h2 {
   margin: 0;
   font-size: 19px;

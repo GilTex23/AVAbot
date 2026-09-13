@@ -3,7 +3,7 @@ from sqlalchemy import select, update, delete, and_, func, text
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.orm import joinedload
 from database.models import (
-    Base, User, Subscription, Voiceover, ScraperApiKey, ScraperApiKeyUsage, EpisodeRelease, EpisodeAiring,
+    Base, User, Subscription, AnimeTitle, Voiceover, ScraperApiKey, ScraperApiKeyUsage, EpisodeRelease, EpisodeAiring,
     DailyStat, UserActivity, ScraperKeySnapshot,
 )
 import datetime
@@ -93,6 +93,33 @@ async def get_user_favorite_voiceovers(tg_id: int) -> list[str]:
     async with async_session() as session:
         favorites = await session.scalar(select(User.favorite_voiceovers).where(User.id == tg_id))
         return list(favorites or [])
+
+
+# --- ANIME TITLES ---
+async def upsert_anime_titles(rows: list[dict]):
+    """rows: id, url, title, poster_url. Название и адрес обновляются, постер — только если пришёл новый"""
+    rows = list({row["id"]: row for row in rows}.values())
+    if not rows:
+        return
+    now = datetime.datetime.utcnow()
+    async with async_session() as session:
+        stmt = pg_insert(AnimeTitle).values([{**row, "updated_at": now} for row in rows])
+        stmt = stmt.on_conflict_do_update(
+            index_elements=[AnimeTitle.id],
+            set_={
+                "url": stmt.excluded.url,
+                "title": stmt.excluded.title,
+                "poster_url": func.coalesce(stmt.excluded.poster_url, AnimeTitle.poster_url),
+                "updated_at": stmt.excluded.updated_at,
+            },
+        )
+        await session.execute(stmt)
+        await session.commit()
+
+
+async def get_anime_title(anime_id: int):
+    async with async_session() as session:
+        return await session.get(AnimeTitle, anime_id)
 
 
 # --- VOICEOVERS ---
