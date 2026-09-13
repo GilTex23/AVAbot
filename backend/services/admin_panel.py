@@ -38,7 +38,7 @@ class UserAdmin(ModelView, model=User):
     column_list = [
         User.id,
         User.username,
-        User.favorite_voiceover,
+        User.favorite_voiceovers,
         User.quiet_hours_enabled,
         User.quiet_timezone,
         User.registered_at,

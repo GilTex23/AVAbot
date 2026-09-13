@@ -3,7 +3,7 @@ from sqlalchemy import select, update, delete, and_, func, text
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.orm import joinedload
 from database.models import (
-    Base, User, Subscription, ScraperApiKey, ScraperApiKeyUsage, EpisodeRelease, EpisodeAiring,
+    Base, User, Subscription, Voiceover, ScraperApiKey, ScraperApiKeyUsage, EpisodeRelease, EpisodeAiring,
     DailyStat, UserActivity, ScraperKeySnapshot,
 )
 import datetime
@@ -29,7 +29,7 @@ async def add_user(tg_id: int, username: str):
     async with async_session() as session:
         user = await session.scalar(select(User).where(User.id == tg_id))
         if not user:
-            session.add(User(id=tg_id, username=username, favorite_voiceover=None))
+            session.add(User(id=tg_id, username=username))
             await session.commit()
             return True
         return False
@@ -39,7 +39,7 @@ async def upsert_user_profile(tg_id: int, username: str | None = None, photo_url
     async with async_session() as session:
         user = await session.scalar(select(User).where(User.id == tg_id))
         if not user:
-            user = User(id=tg_id, username=username, photo_url=photo_url, favorite_voiceover=None)
+            user = User(id=tg_id, username=username, photo_url=photo_url)
             session.add(user)
         else:
             if username is not None:
@@ -52,12 +52,12 @@ async def upsert_user_profile(tg_id: int, username: str | None = None, photo_url
         return user
 
 
-async def update_user_voiceover(tg_id: int, vo: str):
+async def update_user_favorite_voiceovers(tg_id: int, voiceovers: list[str]):
     async with async_session() as session:
         await session.execute(
             update(User)
             .where(User.id == tg_id)
-            .values(favorite_voiceover=vo)
+            .values(favorite_voiceovers=voiceovers)
         )
         await session.commit()
 
@@ -89,10 +89,63 @@ async def update_user_timezone(tg_id: int, timezone: str):
         await session.commit()
 
 
-async def get_user_voiceover(tg_id: int):
+async def get_user_favorite_voiceovers(tg_id: int) -> list[str]:
     async with async_session() as session:
-        user = await session.scalar(select(User).where(User.id == tg_id))
-        return user.favorite_voiceover if user else "AniLiberty"
+        favorites = await session.scalar(select(User.favorite_voiceovers).where(User.id == tg_id))
+        return list(favorites or [])
+
+
+# --- VOICEOVERS ---
+async def touch_voiceovers(names: list[str], seen_at: datetime.datetime | None = None):
+    """Добавляет новые озвучки в справочник и обновляет время, когда озвучку видели последний раз"""
+    names = sorted(set(names))
+    if not names:
+        return
+    seen_at = seen_at or datetime.datetime.utcnow()
+    async with async_session() as session:
+        stmt = pg_insert(Voiceover).values([{"name": name, "first_seen_at": seen_at, "last_seen_at": seen_at} for name in names])
+        stmt = stmt.on_conflict_do_update(
+            index_elements=[Voiceover.name],
+            set_={"last_seen_at": func.greatest(Voiceover.last_seen_at, stmt.excluded.last_seen_at)},
+        )
+        await session.execute(stmt)
+        await session.commit()
+
+
+async def get_voiceover_catalog(releases_since: datetime.datetime):
+    """Справочник с популярностью: серий в ленте с releases_since и подписок; популярные первыми"""
+    releases = (
+        select(EpisodeRelease.studio.label("name"), func.count().label("releases"))
+        .where(EpisodeRelease.released_at >= releases_since)
+        .group_by(EpisodeRelease.studio)
+        .subquery()
+    )
+    subscriptions = (
+        select(Subscription.voiceover.label("name"), func.count().label("subscriptions"))
+        .group_by(Subscription.voiceover)
+        .subquery()
+    )
+    release_count = func.coalesce(releases.c.releases, 0)
+    subscription_count = func.coalesce(subscriptions.c.subscriptions, 0)
+    async with async_session() as session:
+        result = await session.execute(
+            select(Voiceover.id, Voiceover.name, Voiceover.last_seen_at, release_count, subscription_count)
+            .outerjoin(releases, releases.c.name == Voiceover.name)
+            .outerjoin(subscriptions, subscriptions.c.name == Voiceover.name)
+            .order_by(release_count.desc(), subscription_count.desc(), func.lower(Voiceover.name))
+        )
+        return [
+            {"id": id_, "name": name, "last_seen_at": last_seen_at, "releases": releases_, "subscriptions": subscriptions_}
+            for id_, name, last_seen_at, releases_, subscriptions_ in result.all()
+        ]
+
+
+async def get_voiceover_names(names: list[str]) -> set[str]:
+    """Какие из названий есть в справочнике"""
+    if not names:
+        return set()
+    async with async_session() as session:
+        return set(await session.scalars(select(Voiceover.name).where(Voiceover.name.in_(names))))
 
 
 # --- SUBSCRIPTIONS ---

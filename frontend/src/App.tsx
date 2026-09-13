@@ -64,7 +64,7 @@ export default function App() {
   return (
     <TimeZoneContext.Provider value={safeTimeZone(user?.quiet_timezone)}>
       <AppLayout activeTab={activeTab} user={user} refreshing={refreshing} onTabChange={changeTab} onRefresh={refresh}>
-        {activeTab === "updates" ? <Updates favoriteVoiceover={user?.favorite_voiceover || "AniLiberty"} refreshKey={refreshKey} /> : null}
+        {activeTab === "updates" ? <Updates favoriteVoiceovers={user?.favorite_voiceovers ?? []} refreshKey={refreshKey} /> : null}
         {activeTab === "subscriptions" ? <Subscriptions refreshKey={refreshKey} /> : null}
         {activeTab === "schedule" ? <Schedule refreshKey={refreshKey} /> : null}
         {activeTab === "settings" && adminOpen && user?.is_admin ? <Admin refreshKey={refreshKey} onBack={closeAdmin} /> : null}

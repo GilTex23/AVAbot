@@ -1,4 +1,5 @@
-from sqlalchemy import BigInteger, Boolean, String, Column, ForeignKey, Integer, DateTime, Date, UniqueConstraint, Index
+from sqlalchemy import BigInteger, Boolean, String, Column, ForeignKey, Integer, DateTime, Date, UniqueConstraint, Index, text
+from sqlalchemy.dialects.postgresql import ARRAY
 from sqlalchemy.orm import DeclarativeBase, relationship
 from sqlalchemy.ext.asyncio import AsyncAttrs
 import datetime
@@ -14,7 +15,8 @@ class User(Base):
     id = Column(BigInteger, primary_key=True)  # Telegram ID
     username = Column(String, nullable=True)
     photo_url = Column(String, nullable=True)
-    favorite_voiceover = Column(String, default="AniLiberty")
+    # Названия озвучек из справочника voiceovers; пустой список — все озвучки
+    favorite_voiceovers = Column(ARRAY(String), nullable=False, default=list, server_default=text("'{}'"))
     quiet_hours_enabled = Column(Boolean, nullable=False, default=False)
     quiet_hours_start = Column(String, nullable=False, default="23:00")
     quiet_hours_end = Column(String, nullable=False, default="09:00")
@@ -23,6 +25,16 @@ class User(Base):
     registered_at = Column(DateTime, default=datetime.datetime.utcnow)
 
     subscriptions = relationship("Subscription", back_populates="user", cascade="all, delete-orphan")
+
+
+class Voiceover(Base):
+    """Справочник озвучек: пополняется сам — из ленты свежих серий и со страниц тайтлов"""
+    __tablename__ = 'voiceovers'
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    name = Column(String, nullable=False, unique=True)
+    first_seen_at = Column(DateTime, nullable=False, default=datetime.datetime.utcnow)
+    last_seen_at = Column(DateTime, nullable=False, default=datetime.datetime.utcnow)
 
 
 class Subscription(Base):

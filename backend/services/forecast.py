@@ -14,7 +14,9 @@ import logging
 from collections import defaultdict
 
 from database import requests as db
+from services import voiceovers
 from services.parser import max_episode_number, parse_episode_list
+from services.voiceovers import ALL_VOICEOVERS, matches as voiceover_matches
 
 logger = logging.getLogger(__name__)
 
@@ -27,19 +29,10 @@ MAX_AIRING_EXTRAPOLATION = 3
 WEEK = datetime.timedelta(days=7)
 OVERDUE_GRACE = datetime.timedelta(hours=12)
 MIN_WINDOW = datetime.timedelta(hours=1)
-ALL_VOICEOVERS = "Все"
 
 
 def _studio_key(name: str | None) -> str:
     return (name or "").strip().lower()
-
-
-def voiceover_matches(voiceover: str, studio: str) -> bool:
-    """Подходит ли серия из ленты к озвучке подписки: «Все» — любая, иначе озвучка входит в название студии"""
-    if voiceover == ALL_VOICEOVERS:
-        return True
-    voiceover_key, studio_key = _studio_key(voiceover), _studio_key(studio)
-    return bool(voiceover_key) and (voiceover_key == studio_key or voiceover_key in studio_key)
 
 
 def _lag(released_at: datetime.datetime, air_at: datetime.datetime | None) -> datetime.timedelta | None:
@@ -97,6 +90,7 @@ async def record_home(home: dict, subscriptions) -> None:
                 totals[item["link"]] = item["total_episodes"]
 
     await db.record_episode_releases(list(releases.values()))
+    await voiceovers.remember(release["studio"] for release in releases.values())
     await db.record_episode_airings(list(airings.values()))
 
     missing_totals = {sub.anime_url for sub in subscriptions if sub.total_episodes is None}

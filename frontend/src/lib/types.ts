@@ -1,10 +1,9 @@
-export type Voiceover = "AniLiberty" | "AniDUB" | "Dream Cast" | "SHIZA Project" | "AnimeVost" | "Все" | string;
-
 export type UserProfile = {
   id: number;
   username?: string | null;
   photo_url?: string | null;
-  favorite_voiceover?: string | null;
+  /** Пустой список — все озвучки */
+  favorite_voiceovers: string[];
   quiet_hours_enabled: boolean;
   quiet_hours_start: string;
   quiet_hours_end: string;
@@ -19,6 +18,24 @@ export type UpdateItem = {
   studio: string;
   link: string;
   poster_url?: string;
+};
+
+export type UpdatesResponse = {
+  /** favorites — по любимым озвучкам (нет любимых — все), all — все, voiceover — одна озвучка */
+  filter: "favorites" | "all" | "voiceover";
+  voiceover?: string | null;
+  favorites: string[];
+  items: UpdateItem[];
+  /** Озвучки, которые сейчас есть в ленте, самые частые первыми */
+  studios: Array<{ name: string; count: number }>;
+};
+
+export type VoiceoverCatalogItem = {
+  id: number;
+  name: string;
+  /** Серий в ленте за popular_days дней */
+  releases: number;
+  subscriptions: number;
 };
 
 export type NextEpisodeForecast = {

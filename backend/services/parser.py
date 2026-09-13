@@ -12,7 +12,7 @@ import config
 from aiogram import Bot
 from services.notifier import notify_admins
 from services.scraper_keys import key_pool, STATUS_EXHAUSTED, STATUS_INVALID
-from services import stats, timezone_alerts
+from services import stats, timezone_alerts, voiceovers
 from services.timezone_labels import TIMEZONE_LABELS
 from utils.antispam import AntiSpamNotify
 
@@ -744,6 +744,7 @@ async def get_anime_details(url: str, bot: Bot):
                     voiceovers_list.append(vo_name)
 
         info['available_voiceovers'] = voiceovers_list
+        await voiceovers.remember(voiceovers_list)
 
         return info
 
@@ -752,22 +753,11 @@ async def get_anime_details(url: str, bot: Bot):
         return None
 
 
-async def get_filtered(vo: str, bot: Bot):
+async def get_filtered(voiceover_names: list[str] | None, bot: Bot):
     """
-    Возвращает СПИСОК аниме (list of dict), отфильтрованный по озвучке.
-    Возвращает None, если произошла ошибка при получении данных.
+    Свежие серии для списка озвучек (пустой список — все). None — если ленту не удалось получить.
     """
     updates = await get_updates(bot)
-
     if updates is None:
         return None
-
-    filtered_anime = []
-    for anime in updates:
-        anime_studio_clean = anime['studio'].strip().lower()
-        vo_clean = vo.strip().lower()
-
-        if vo == "Все" or vo_clean in anime_studio_clean or vo_clean == anime_studio_clean:
-            filtered_anime.append(anime)
-
-    return filtered_anime
+    return voiceovers.filter_updates(updates, voiceover_names)

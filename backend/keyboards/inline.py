@@ -2,31 +2,69 @@ from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton
 from aiogram.utils.keyboard import InlineKeyboardBuilder
 
 
-def main_menu():
+FAVORITES_PAGE_SIZE = 10
+# Контекст экрана любимых озвучек: знакомство после /start или настройки из меню
+FAVORITES_ONBOARDING = "o"
+FAVORITES_SETTINGS = "s"
+
+
+def main_menu(has_favorites: bool = False):
     kb = InlineKeyboardBuilder()
-    kb.button(text="🔥 Свежие серии (Любимая)", callback_data="get_updates_default")
+    kb.button(text="🔥 Свежие серии (любимые)" if has_favorites else "🔥 Свежие серии (все озвучки)", callback_data="get_updates_default")
     kb.button(text="🎙 Другая озвучка", callback_data="select_other_vo")
     kb.button(text="📅 Расписание (Добавить)", callback_data="open_schedule")
     kb.button(text="📋 Мои подписки", callback_data="my_subs")
-    kb.button(text="⚙️ Настройки любимой", callback_data="settings")
+    kb.button(text="⚙️ Любимые озвучки", callback_data="settings")
     kb.adjust(1)
     return kb.as_markup()
 
 
-def voiceover_selection(current_vo: str, mode: str = "save"):
+def favorite_voiceovers(catalog: list[dict], favorites: list[str], page: int, context: str):
     """
-    mode: 'save' - сохранить в БД как любимую
-    mode: 'view' - просто посмотреть обновления
+    Отметки любимых озвучек из справочника, по FAVORITES_PAGE_SIZE на страницу.
+    В callback_data — id озвучки, а не название: у Telegram лимит 64 байта.
     """
-    vos = ['AniLiberty', 'Дубляж', 'AniDUB', 'Dream Cast', 'SHIZA Project', 'Субтитры', 'Все']
-    kb = InlineKeyboardBuilder()
-    for vo in vos:
-        text = f"✅ {vo}" if vo == current_vo and mode == 'save' else vo
-        # Передаем режим в callback data
-        kb.button(text=text, callback_data=f"set_vo_{mode}_{vo}")
+    pages = max(1, -(-len(catalog) // FAVORITES_PAGE_SIZE))
+    page = min(max(page, 0), pages - 1)
+    chosen = set(favorites)
 
+    kb = InlineKeyboardBuilder()
+    items = InlineKeyboardBuilder()
+    for item in catalog[page * FAVORITES_PAGE_SIZE:(page + 1) * FAVORITES_PAGE_SIZE]:
+        mark = "✅ " if item["name"] in chosen else ""
+        items.button(text=f"{mark}{item['name']}", callback_data=f"fav:t:{item['id']}:{page}:{context}")
+    items.adjust(2)
+    kb.attach(items)
+
+    if pages > 1:
+        nav = InlineKeyboardBuilder()
+        nav.button(text="⬅️", callback_data=f"fav:p:{(page - 1) % pages}:{context}")
+        nav.button(text=f"{page + 1} / {pages}", callback_data="ignore")
+        nav.button(text="➡️", callback_data=f"fav:p:{(page + 1) % pages}:{context}")
+        nav.adjust(3)
+        kb.attach(nav)
+
+    controls = InlineKeyboardBuilder()
+    if favorites:
+        controls.button(text="♻️ Сбросить — все озвучки", callback_data=f"fav:c:{page}:{context}")
+    controls.button(text="✅ Готово" if context == FAVORITES_ONBOARDING else "🔙 Назад", callback_data="back_home")
+    controls.adjust(1)
+    kb.attach(controls)
+    return kb.as_markup()
+
+
+def feed_voiceovers(studios: list[dict]):
+    """Озвучки, которые сейчас есть в ленте; в callback_data — номер в списке, сохранённом в FSM"""
+    kb = InlineKeyboardBuilder()
+    for index, studio in enumerate(studios):
+        kb.button(text=f"{studio['name']} ({studio['count']})", callback_data=f"vo_view:{index}")
     kb.adjust(2)
-    kb.button(text="🔙 Назад", callback_data="back_home")
+
+    controls = InlineKeyboardBuilder()
+    controls.button(text="🌐 Все озвучки", callback_data="vo_view:all")
+    controls.button(text="🔙 Назад", callback_data="back_home")
+    controls.adjust(1)
+    kb.attach(controls)
     return kb.as_markup()
 
 
@@ -144,9 +182,9 @@ def anime_voiceovers_list(voiceovers: list):
     Кнопки выбора озвучки (для нового сообщения).
     """
     kb = InlineKeyboardBuilder()
-    for vo in voiceovers:
-        # Обрезаем название, чтобы влезло в callback_data (макс 64 байта)
-        kb.button(text=vo, callback_data=f"sched_sub_vo_{vo[:40]}")
+    for index, vo in enumerate(voiceovers):
+        # Название может не влезть в callback_data (64 байта) — передаём номер, список лежит в FSM
+        kb.button(text=vo, callback_data=f"sched_sub_vo:{index}")
 
     kb.adjust(2)
     kb.attach(InlineKeyboardBuilder().button(text="❌ Отмена", callback_data="close_message"))

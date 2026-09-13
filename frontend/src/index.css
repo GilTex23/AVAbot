@@ -185,6 +185,41 @@ button {
   color: var(--red-hover);
 }
 
+.chip__count {
+  margin-left: 6px;
+  color: var(--soft);
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.chip--active .chip__count {
+  color: inherit;
+  opacity: 0.75;
+}
+
+.voiceover-picker {
+  display: grid;
+  gap: 10px;
+}
+
+.voiceover-picker__summary {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.voiceover-picker__more {
+  justify-self: start;
+  border: 0;
+  padding: 0;
+  background: none;
+  color: var(--red-hover);
+  font-size: 14px;
+  font-weight: 700;
+}
+
 .card {
   border: 1px solid var(--border);
   border-radius: var(--radius);

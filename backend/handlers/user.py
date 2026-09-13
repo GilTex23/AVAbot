@@ -3,10 +3,11 @@ from aiogram.filters import CommandStart, StateFilter
 from aiogram.fsm.context import FSMContext
 from aiogram.exceptions import TelegramBadRequest
 from contextlib import suppress
+import html
 
 from database import requests as db
 from keyboards import inline
-from services import parser, stats
+from services import parser, stats, voiceovers
 from services.subscription_rules import subscription_block_reason
 from utils.states import UpdatesState, ScheduleState
 import logging
@@ -24,8 +25,9 @@ async def render_main_menu(message: types.Message, user_id: int, is_edit: bool =
     is_edit=False -> отправляем новое (для команды /start)
     """
     # Текст меню
-    text = "👋 <b>Главное меню:</b>"
-    kb = inline.main_menu()
+    favorites = await db.get_user_favorite_voiceovers(user_id)
+    text = f"👋 <b>Главное меню:</b>\n🎙 Любимые озвучки: <i>{html.escape(voiceovers.describe(favorites))}</i>"
+    kb = inline.main_menu(has_favorites=bool(favorites))
 
     if is_edit:
         with suppress(TelegramBadRequest):
@@ -34,10 +36,12 @@ async def render_main_menu(message: types.Message, user_id: int, is_edit: bool =
         await message.answer(text, reply_markup=kb, parse_mode="HTML")
 
 
-async def show_updates_for_vo(message: types.Message, state: FSMContext, vo: str):
+async def show_updates_for_vo(message: types.Message, state: FSMContext, names: list[str], label: str):
     """
-    Загружает и показывает список обновлений.
+    Загружает и показывает свежие серии для списка озвучек (пустой список — все).
+    label — как назвать выборку в тексте: «AniLiberty», «Все озвучки».
     """
+    vo = html.escape(label)
     try:
         await message.edit_text(
             f"⏳ <b>Загружаю обновления ({vo})...</b>\n<i>Пожалуйста, подождите.</i>",
@@ -46,7 +50,7 @@ async def show_updates_for_vo(message: types.Message, state: FSMContext, vo: str
     except TelegramBadRequest:
         pass  # Если сообщение уже такое, игнорируем
 
-    updates = await parser.get_filtered(vo, message.bot)
+    updates = await parser.get_filtered(names, message.bot)
 
     if updates is None:
         await message.edit_text(
@@ -59,10 +63,10 @@ async def show_updates_for_vo(message: types.Message, state: FSMContext, vo: str
         return
 
     if not updates:
-        await state.update_data(current_updates=updates, current_vo=vo)
+        await state.update_data(current_updates=updates, current_names=names, current_label=label)
         await state.set_state(UpdatesState.viewing_list)
         await message.edit_text(
-            f"😔 Свежих серий с озвучкой <b>{vo}</b> не найдено.",
+            f"😔 Свежих серий (<b>{vo}</b>) не найдено.",
             reply_markup=inline.updates_list_actions(updates),
             parse_mode="HTML"
         )
@@ -82,7 +86,7 @@ async def show_updates_for_vo(message: types.Message, state: FSMContext, vo: str
     text_lines.append("\n<i>Нажми на кнопку с номером, чтобы добавить аниме в любимые.</i>")
     result_text = "\n".join(text_lines)
 
-    await state.update_data(current_updates=updates, current_vo=vo)
+    await state.update_data(current_updates=updates, current_names=names, current_label=label)
     await state.set_state(UpdatesState.viewing_list)
 
     await message.edit_text(
@@ -99,14 +103,12 @@ async def cmd_start(message: types.Message, state: FSMContext):
     await state.clear()
 
     is_new_user = await db.add_user(message.from_user.id, message.from_user.username)
-    user = await db.get_user(message.from_user.id)
 
-    if is_new_user or (user and not user.favorite_voiceover):
+    if is_new_user:
+        text, kb = await favorites_screen(message.from_user.id, page=0, context=inline.FAVORITES_ONBOARDING)
         await message.answer(
-            f"👋 Привет, {message.from_user.first_name}!\n\n"
-            "Для начала работы выбери твою <b>любимую озвучку</b>.\n"
-            "Я буду показывать обновления именно для неё по умолчанию.",
-            reply_markup=inline.voiceover_selection("Не выбрано", mode="save"),
+            f"👋 Привет, {html.escape(message.from_user.first_name or '')}!\n\n" + text,
+            reply_markup=kb,
             parse_mode="HTML"
         )
     else:
@@ -119,59 +121,125 @@ async def cb_back_home(callback: types.CallbackQuery, state: FSMContext):
     await render_main_menu(callback.message, callback.from_user.id, is_edit=True)
 
 
-# --- ПОЛУЧЕНИЕ ОБНОВЛЕНИЙ (DEFAULT) ---
+# --- ПОЛУЧЕНИЕ ОБНОВЛЕНИЙ ПО ЛЮБИМЫМ ОЗВУЧКАМ ---
 @router.callback_query(F.data == "get_updates_default")
 async def cb_get_updates_default(callback: types.CallbackQuery, state: FSMContext):
-    user = await db.get_user(callback.from_user.id)
-    vo = user.favorite_voiceover if user and user.favorite_voiceover else "AniLiberty"
+    favorites = await db.get_user_favorite_voiceovers(callback.from_user.id)
+    label = voiceovers.describe(favorites)
 
-    await callback.answer(f"🚀 Загружаю: {vo}...", cache_time=5)
+    await callback.answer(f"🚀 Загружаю: {label}...", cache_time=5)
 
-    await show_updates_for_vo(callback.message, state, vo)
+    await show_updates_for_vo(callback.message, state, favorites, label)
 
 
-# --- ВЫБОР ДРУГОЙ ОЗВУЧКИ (БЕЗ СОХРАНЕНИЯ) ---
+# --- ДРУГАЯ ОЗВУЧКА: ТЕ, ЧТО СЕЙЧАС ЕСТЬ В ЛЕНТЕ (БЕЗ СОХРАНЕНИЯ) ---
 @router.callback_query(F.data == "select_other_vo")
-async def cb_select_other_vo(callback: types.CallbackQuery):
-    await callback.answer("🎙 Выбор режима просмотра")
+async def cb_select_other_vo(callback: types.CallbackQuery, state: FSMContext):
+    await callback.answer("🎙 Выбор озвучки")
+    with suppress(TelegramBadRequest):
+        await callback.message.edit_text("⏳ <b>Смотрю, какие озвучки есть в ленте...</b>", parse_mode="HTML")
+
+    updates = await parser.get_updates(callback.bot)
+    if updates is None:
+        await callback.message.edit_text(
+            "⚠️ <b>Ошибка получения данных.</b>\nПожалуйста, повторите попытку позже.",
+            reply_markup=inline.back_button(),
+            parse_mode="HTML"
+        )
+        return
+
+    studios = voiceovers.studios_in(updates)
+    await state.update_data(feed_studios=[studio["name"] for studio in studios])
     await callback.message.edit_text(
-        "Выберите озвучку для просмотра списка <i>(это не изменит настройки по умолчанию)</i>:",
-        reply_markup=inline.voiceover_selection("", mode="view"),
+        "Выберите озвучку из свежих серий <i>(любимые озвучки не изменятся)</i>.\n"
+        "<i>В скобках — сколько серий сейчас в ленте.</i>",
+        reply_markup=inline.feed_voiceovers(studios),
         parse_mode="HTML"
     )
 
 
-# --- НАСТРОЙКИ (С СОХРАНЕНИЕМ) ---
+@router.callback_query(F.data.startswith("vo_view:"))
+async def cb_view_voiceover(callback: types.CallbackQuery, state: FSMContext):
+    choice = callback.data.split(":", 1)[1]
+    if choice == "all":
+        label = voiceovers.describe([])
+        await callback.answer(f"👁 Загружаю: {label}")
+        await show_updates_for_vo(callback.message, state, [], label)
+        return
+
+    studios = (await state.get_data()).get("feed_studios") or []
+    if not choice.isdigit() or int(choice) >= len(studios):
+        await callback.answer("⚠️ Список устарел, откройте его заново.", show_alert=True)
+        return
+
+    name = studios[int(choice)]
+    await callback.answer(f"👁 Загружаю: {name}")
+    await show_updates_for_vo(callback.message, state, [name], name)
+
+
+# --- ЛЮБИМЫЕ ОЗВУЧКИ (С СОХРАНЕНИЕМ) ---
+async def favorites_screen(user_id: int, page: int, context: str):
+    catalog = await voiceovers.catalog()
+    favorites = await db.get_user_favorite_voiceovers(user_id)
+
+    lines = [
+        "🎙 <b>Любимые озвучки</b>",
+        f"Сейчас: <b>{html.escape(voiceovers.describe(favorites, limit=10))}</b>",
+        "",
+        "Отметьте озвучки — «Свежие серии» будут показывать только их. Ничего не отмечено — показываются все.",
+    ]
+    if catalog:
+        lines.append(f"<i>Сверху — самые активные за {voiceovers.POPULAR_DAYS} дней.</i>")
+    else:
+        lines.append("<i>Список озвучек появится после первой проверки ленты.</i>")
+    return "\n".join(lines), inline.favorite_voiceovers(catalog, favorites, page, context)
+
+
+async def render_favorites(message: types.Message, user_id: int, page: int, context: str):
+    text, kb = await favorites_screen(user_id, page, context)
+    with suppress(TelegramBadRequest):
+        await message.edit_text(text, reply_markup=kb, parse_mode="HTML")
+
+
 @router.callback_query(F.data == "settings")
 async def cb_settings(callback: types.CallbackQuery):
-    user = await db.get_user(callback.from_user.id)
-    vo = user.favorite_voiceover if user else "Не выбрано"
-
-    await callback.answer("⚙️ Настройки")
-    await callback.message.edit_text(
-        f"💾 <b>Настройки</b>\n"
-        f"Текущая любимая озвучка: <b>{vo}</b>\n\n"
-        "Выберите новую, чтобы бот запомнил её:",
-        reply_markup=inline.voiceover_selection(vo, mode="save"),
-        parse_mode="HTML"
-    )
+    await callback.answer("⚙️ Любимые озвучки")
+    await render_favorites(callback.message, callback.from_user.id, page=0, context=inline.FAVORITES_SETTINGS)
 
 
-# --- ОБРАБОТКА ВЫБОРА ОЗВУЧКИ (ОБЩАЯ) ---
-@router.callback_query(F.data.startswith("set_vo_"))
-async def cb_handle_vo_selection(callback: types.CallbackQuery, state: FSMContext):
-    parts = callback.data.split("_")
-    mode = parts[2]  # save или view
-    vo = callback.data.replace(f"set_vo_{mode}_", "")
+@router.callback_query(F.data.startswith("fav:"))
+async def cb_favorites(callback: types.CallbackQuery):
+    # fav:t:<id>:<page>:<ctx> — отметить или снять, fav:p:<page>:<ctx> — страница, fav:c:<page>:<ctx> — сбросить
+    parts = callback.data.split(":")
+    if len(parts) < 4:
+        await callback.answer()
+        return
+    action, context = parts[1], parts[-1]
+    page = int(parts[-2]) if parts[-2].isdigit() else 0
+    user_id = callback.from_user.id
 
-    if mode == "save":
-        await db.update_user_voiceover(callback.from_user.id, vo)
-        await callback.answer(f"✅ Сохранено: {vo}", show_alert=False)
-        await callback.message.edit_reply_markup(reply_markup=inline.voiceover_selection(vo, mode="save"))
+    if action == "t" and parts[2].isdigit():
+        catalog = await voiceovers.catalog()
+        item = next((item for item in catalog if item["id"] == int(parts[2])), None)
+        if item is None:
+            await callback.answer("⚠️ Такой озвучки больше нет в списке.", show_alert=True)
+        else:
+            favorites = await db.get_user_favorite_voiceovers(user_id)
+            if item["name"] in favorites:
+                favorites.remove(item["name"])
+                await callback.answer(f"Убрано: {item['name']}")
+            elif len(favorites) >= voiceovers.MAX_FAVORITES:
+                await callback.answer(f"⚠️ Можно выбрать не больше {voiceovers.MAX_FAVORITES} озвучек.", show_alert=True)
+                return
+            else:
+                favorites.append(item["name"])
+                await callback.answer(f"✅ Добавлено: {item['name']}")
+            await db.update_user_favorite_voiceovers(user_id, favorites)
+    elif action == "c":
+        await db.update_user_favorite_voiceovers(user_id, [])
+        await callback.answer("♻️ Показываю все озвучки")
 
-    elif mode == "view":
-        await callback.answer(f"👁 Загружаю: {vo}")
-        await show_updates_for_vo(callback.message, state, vo)
+    await render_favorites(callback.message, user_id, page, context)
 
 
 # --- ДОБАВЛЕНИЕ В ИЗБРАННОЕ ИЗ СПИСКА (FSM) ---
@@ -240,10 +308,10 @@ async def cb_add_from_list(callback: types.CallbackQuery, state: FSMContext):
 @router.callback_query(F.data == "refresh_updates", StateFilter(UpdatesState.viewing_list))
 async def cb_refresh(callback: types.CallbackQuery, state: FSMContext):
     data = await state.get_data()
-    vo = data.get("current_vo", "AniLiberty")
+    names = data.get("current_names") or []
 
     await callback.answer("🔄 Обновляю список...")
-    await show_updates_for_vo(callback.message, state, vo)
+    await show_updates_for_vo(callback.message, state, names, data.get("current_label") or voiceovers.describe(names))
 
 
 # --- ВСПОМОГАТЕЛЬНАЯ ФУНКЦИЯ ОТРИСОВКИ ДНЯ ---
@@ -348,36 +416,39 @@ async def cb_schedule_item_select(callback: types.CallbackQuery, state: FSMConte
         )
         return
 
-    voiceovers = info.get('available_voiceovers', [])
-    if not voiceovers:
+    anime_voiceovers = info.get('available_voiceovers', [])
+    if not anime_voiceovers:
         await msg.edit_text(f"⚠️ Нет озвучек для <b>{anime['title']}</b>.", parse_mode="HTML")
         return
 
     await state.update_data(
         selected_anime_title=anime['title'],
         selected_anime_url=anime['link'],
-        selected_anime_total=info['total_episodes']
+        selected_anime_total=info['total_episodes'],
+        selected_anime_voiceovers=anime_voiceovers,
     )
 
     await msg.edit_text(
         f"📺 <b>{anime['title']}</b>\n"
         f"👇 Выберите озвучку для подписки:",
-        reply_markup=inline.anime_voiceovers_list(voiceovers),
+        reply_markup=inline.anime_voiceovers_list(anime_voiceovers),
         parse_mode="HTML"
     )
 
 
 # --- ФИНАЛИЗАЦИЯ ПОДПИСКИ ---
-@router.callback_query(F.data.startswith("sched_sub_vo_"))
+@router.callback_query(F.data.startswith("sched_sub_vo:"))
 async def cb_schedule_sub_finalize(callback: types.CallbackQuery, state: FSMContext):
-    vo = callback.data.replace("sched_sub_vo_", "")
+    index = callback.data.split(":", 1)[1]
 
     data = await state.get_data()
     title = data.get("selected_anime_title")
     url = data.get("selected_anime_url")
     total_eps = data.get("selected_anime_total")
+    anime_voiceovers = data.get("selected_anime_voiceovers") or []
+    vo = anime_voiceovers[int(index)] if index.isdigit() and int(index) < len(anime_voiceovers) else None
 
-    if not title or not url:
+    if not title or not url or vo is None:
         await callback.answer("⚠️ Ошибка контекста. Повторите выбор аниме.", show_alert=True)
         await callback.message.delete()
         return
@@ -458,3 +529,14 @@ async def cb_unsubscribe(callback: types.CallbackQuery):
 
     # Обновляем список (рекурсивно вызываем функцию просмотра подписок)
     await cb_my_subs(callback)
+
+
+@router.callback_query(F.data == "ignore")
+async def cb_ignore(callback: types.CallbackQuery):
+    await callback.answer()
+
+
+# Кнопки из сообщений, отправленных до перехода на список любимых озвучек
+@router.callback_query(F.data.startswith(("set_vo_", "sched_sub_vo_")))
+async def cb_outdated_voiceover_buttons(callback: types.CallbackQuery):
+    await callback.answer("Меню обновилось — откройте его заново командой /start.", show_alert=True)

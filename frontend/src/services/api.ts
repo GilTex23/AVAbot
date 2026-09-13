@@ -10,7 +10,9 @@ import type {
   ScraperKeysOverview,
   SubscriptionItem,
   UpdateItem,
+  UpdatesResponse,
   UserProfile,
+  VoiceoverCatalogItem,
   WeekItem,
 } from "../lib/types";
 
@@ -78,8 +80,13 @@ export function getProfile(): Promise<UserProfile> {
   return fetchJson<UserProfile>("/api/miniapp/me");
 }
 
-export function getUpdates(voiceover: string): Promise<{ voiceover: string; items: UpdateItem[] }> {
-  return fetchJson(`/api/miniapp/updates?voiceover=${encodeURIComponent(voiceover)}`);
+/** Без voiceover — по любимым озвучкам; ALL_VOICEOVERS — все серии */
+export function getUpdates(voiceover?: string | null): Promise<UpdatesResponse> {
+  return fetchJson(voiceover ? `/api/miniapp/updates?voiceover=${encodeURIComponent(voiceover)}` : "/api/miniapp/updates");
+}
+
+export function getVoiceovers(): Promise<{ items: VoiceoverCatalogItem[]; popular_days: number }> {
+  return fetchJson("/api/miniapp/voiceovers");
 }
 
 export function getSubscriptions(): Promise<{ items: SubscriptionItem[] }> {
@@ -134,10 +141,10 @@ export function getAnimeDetails(link: string): Promise<AnimeDetails> {
   return fetchJson(`/api/miniapp/anime-details?link=${encodeURIComponent(link)}`);
 }
 
-export function saveVoiceover(voiceover: string) {
-  return fetchJson<{ favorite_voiceover: string }>("/api/miniapp/settings/voiceover", {
+export function saveFavoriteVoiceovers(voiceovers: string[]) {
+  return fetchJson<{ favorite_voiceovers: string[] }>("/api/miniapp/settings/voiceovers", {
     method: "PUT",
-    body: JSON.stringify({ voiceover }),
+    body: JSON.stringify({ voiceovers }),
   });
 }
 

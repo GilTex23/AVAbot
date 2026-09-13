@@ -1,13 +1,13 @@
-import { Check, ChevronRight, Loader2, Save, ShieldCheck, SlidersHorizontal } from "lucide-react";
-import { useEffect, useMemo, useState } from "react";
+import { Check, ChevronRight, Loader2, Save, Search, ShieldCheck, SlidersHorizontal } from "lucide-react";
+import { useEffect, useMemo, useState, type Dispatch, type SetStateAction } from "react";
 import { Badge } from "../components/ui/badge";
 import { Button } from "../components/ui/button";
 import { Card } from "../components/ui/card";
 import { Switch } from "../components/ui/switch";
-import { saveQuietHours, saveTimeZone, saveVoiceover } from "../services/api";
-import type { UserProfile } from "../lib/types";
+import { errorText, getVoiceovers, saveFavoriteVoiceovers, saveQuietHours, saveTimeZone } from "../services/api";
+import type { UserProfile, VoiceoverCatalogItem } from "../lib/types";
 import { hapticNotification } from "../lib/telegram";
-import { voiceovers } from "../lib/utils";
+import { describeVoiceovers } from "../lib/utils";
 import { DEFAULT_TIME_ZONE, formatTimeZoneLabel, getTimeZones } from "../lib/timezones";
 
 type SettingsProps = {
@@ -17,7 +17,7 @@ type SettingsProps = {
 };
 
 export function Settings({ user, onUserUpdated, onOpenAdmin }: SettingsProps) {
-  const [voiceover, setVoiceover] = useState(user?.favorite_voiceover || "AniLiberty");
+  const [favorites, setFavorites] = useState<string[]>(user?.favorite_voiceovers ?? []);
   const [quietMode, setQuietMode] = useState(user?.quiet_hours_enabled || false);
   const [quietStart, setQuietStart] = useState(user?.quiet_hours_start || "23:00");
   const [quietEnd, setQuietEnd] = useState(user?.quiet_hours_end || "09:00");
@@ -31,7 +31,7 @@ export function Settings({ user, onUserUpdated, onOpenAdmin }: SettingsProps) {
   const savedTimezone = user?.quiet_timezone || DEFAULT_TIME_ZONE;
 
   useEffect(() => {
-    setVoiceover(user?.favorite_voiceover || "AniLiberty");
+    setFavorites(user?.favorite_voiceovers ?? []);
     setQuietMode(user?.quiet_hours_enabled || false);
     setQuietStart(user?.quiet_hours_start || "23:00");
     setQuietEnd(user?.quiet_hours_end || "09:00");
@@ -54,17 +54,17 @@ export function Settings({ user, onUserUpdated, onOpenAdmin }: SettingsProps) {
     }
   }
 
-  async function saveFavoriteVoiceover() {
+  async function saveFavorites() {
     setSavingVoiceover(true);
     setNotice(null);
     try {
-      const result = await saveVoiceover(voiceover);
-      onUserUpdated(user ? { ...user, favorite_voiceover: result.favorite_voiceover } : null);
+      const result = await saveFavoriteVoiceovers(favorites);
+      onUserUpdated(user ? { ...user, favorite_voiceovers: result.favorite_voiceovers } : null);
       hapticNotification("success");
-      setNotice("Озвучка сохранена.");
-    } catch {
+      setNotice("Любимые озвучки сохранены.");
+    } catch (error) {
       hapticNotification("error");
-      setNotice("Не удалось сохранить озвучку.");
+      setNotice(errorText(error, "Не удалось сохранить озвучки."));
     } finally {
       setSavingVoiceover(false);
     }
@@ -133,17 +133,11 @@ export function Settings({ user, onUserUpdated, onOpenAdmin }: SettingsProps) {
       ) : null}
 
       <Card className="settings-card settings-card--column">
-        <h2>Любимая озвучка</h2>
-        <div className="chip-row chip-row--wrap">
-          {voiceovers.map((item) => (
-            <button key={item} className={item === voiceover ? "chip chip--active" : "chip"} type="button" onClick={() => setVoiceover(item)}>
-              {item}
-            </button>
-          ))}
-        </div>
-        <Button variant="primary" disabled={savingVoiceover} onClick={saveFavoriteVoiceover}>
-          {savingVoiceover ? <Loader2 className="spin" size={17} /> : user?.favorite_voiceover === voiceover ? <Check size={17} /> : <Save size={17} />}
-          {savingVoiceover ? "Сохраняю" : "Сохранить озвучку"}
+        <h2>Любимые озвучки</h2>
+        <FavoriteVoiceoversPicker selected={favorites} saved={user?.favorite_voiceovers ?? []} onChange={setFavorites} />
+        <Button variant="primary" disabled={savingVoiceover} onClick={saveFavorites}>
+          {savingVoiceover ? <Loader2 className="spin" size={17} /> : sameNames(user?.favorite_voiceovers ?? [], favorites) ? <Check size={17} /> : <Save size={17} />}
+          {savingVoiceover ? "Сохраняю" : "Сохранить озвучки"}
         </Button>
       </Card>
 
@@ -184,6 +178,125 @@ export function Settings({ user, onUserUpdated, onOpenAdmin }: SettingsProps) {
           {savingQuiet ? "Сохраняю" : "Сохранить тихие часы"}
         </Button>
       </Card>
+    </div>
+  );
+}
+
+const COLLAPSED_COUNT = 12;
+const MAX_FAVORITES = 20;
+
+function sameNames(left: string[], right: string[]) {
+  return left.length === right.length && left.every((name) => right.includes(name));
+}
+
+type FavoriteVoiceoversPickerProps = {
+  selected: string[];
+  saved: string[];
+  onChange: Dispatch<SetStateAction<string[]>>;
+};
+
+/** Отметки озвучек из справочника: сохранённые любимые сверху, дальше — самые активные */
+function FavoriteVoiceoversPicker({ selected, saved, onChange }: FavoriteVoiceoversPickerProps) {
+  const [catalog, setCatalog] = useState<VoiceoverCatalogItem[] | null>(null);
+  const [popularDays, setPopularDays] = useState(60);
+  const [failed, setFailed] = useState(false);
+  const [query, setQuery] = useState("");
+  const [expanded, setExpanded] = useState(false);
+
+  useEffect(() => {
+    let cancelled = false;
+    getVoiceovers()
+      .then((data) => {
+        if (!cancelled) {
+          setCatalog(data.items);
+          setPopularDays(data.popular_days);
+        }
+      })
+      .catch(() => {
+        if (!cancelled) {
+          setFailed(true);
+        }
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  // Порядок зависит только от сохранённых любимых, чтобы кнопки не прыгали при нажатии
+  const ordered = useMemo(() => {
+    if (!catalog) {
+      return [];
+    }
+    const pinned = saved
+      .map((name) => catalog.find((item) => item.name === name))
+      .filter((item): item is VoiceoverCatalogItem => Boolean(item));
+    return [...pinned, ...catalog.filter((item) => !saved.includes(item.name))];
+  }, [catalog, saved]);
+
+  const needle = query.trim().toLowerCase();
+  const matching = needle ? ordered.filter((item) => item.name.toLowerCase().includes(needle)) : ordered;
+  const visible = needle || expanded ? matching : matching.slice(0, COLLAPSED_COUNT);
+
+  function toggle(name: string) {
+    if (!selected.includes(name) && selected.length >= MAX_FAVORITES) {
+      hapticNotification("warning");
+      return;
+    }
+    // От текущего состояния, а не от selected из замыкания: быстрые нажатия подряд не затирают друг друга
+    onChange((current) => {
+      if (current.includes(name)) {
+        return current.filter((item) => item !== name);
+      }
+      return current.length < MAX_FAVORITES ? [...current, name] : current;
+    });
+  }
+
+  if (failed) {
+    return <p className="muted-copy">Не удалось загрузить список озвучек.</p>;
+  }
+  if (!catalog) {
+    return (
+      <p className="muted-copy">
+        <Loader2 className="spin" size={15} /> Загружаю озвучки...
+      </p>
+    );
+  }
+  if (!catalog.length) {
+    return <p className="muted-copy">Список озвучек появится после первой проверки ленты.</p>;
+  }
+
+  return (
+    <div className="voiceover-picker">
+      <div className="voiceover-picker__summary">
+        <Badge tone={selected.length ? "red" : "muted"}>{describeVoiceovers(selected, 2)}</Badge>
+        {selected.length ? (
+          <button type="button" className="voiceover-picker__more" onClick={() => onChange([])}>
+            Сбросить
+          </button>
+        ) : null}
+      </div>
+      <p className="muted-copy">
+        «Свежие серии» по умолчанию покажут только отмеченные озвучки, а если ничего не отмечено — все. Сверху — самые активные за {popularDays} дней.
+      </p>
+      {catalog.length > COLLAPSED_COUNT ? (
+        <label className="search-field">
+          <Search size={17} />
+          <input className="input" type="search" placeholder="Найти озвучку" value={query} onChange={(event) => setQuery(event.target.value)} />
+        </label>
+      ) : null}
+      <div className="chip-row chip-row--wrap">
+        {visible.map((item) => (
+          <button key={item.id} className={selected.includes(item.name) ? "chip chip--active" : "chip"} type="button" onClick={() => toggle(item.name)}>
+            {item.name}
+          </button>
+        ))}
+      </div>
+      {needle && !matching.length ? <p className="muted-copy">Ничего не найдено.</p> : null}
+      {!needle && matching.length > COLLAPSED_COUNT ? (
+        <button type="button" className="voiceover-picker__more" onClick={() => setExpanded((value) => !value)}>
+          {expanded ? "Свернуть" : "Показать все (" + matching.length + ")"}
+        </button>
+      ) : null}
     </div>
   );
 }

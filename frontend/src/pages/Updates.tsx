@@ -5,24 +5,36 @@ import { Button } from "../components/ui/button";
 import { Card } from "../components/ui/card";
 import { LazyImage } from "../components/ui/LazyImage";
 import { addSubscription, errorText, getSubscriptions, getUpdates } from "../services/api";
-import type { SubscriptionItem, UpdateItem } from "../lib/types";
+import type { SubscriptionItem, UpdateItem, UpdatesResponse } from "../lib/types";
 import { buildSubscriptionIndex, subscriptionKey } from "../lib/subscriptions";
 import { hapticNotification } from "../lib/telegram";
-import { openAnime, voiceovers } from "../lib/utils";
+import { ALL_VOICEOVERS, describeVoiceovers, openAnime } from "../lib/utils";
 
 type UpdatesProps = {
-  favoriteVoiceover: string;
+  favoriteVoiceovers: string[];
   refreshKey: number;
 };
 
-export function Updates({ favoriteVoiceover, refreshKey }: UpdatesProps) {
-  const [selectedVoiceover, setSelectedVoiceover] = useState(favoriteVoiceover || "AniLiberty");
+export function Updates({ favoriteVoiceovers, refreshKey }: UpdatesProps) {
+  // null — любимые озвучки (если их нет, сервер отдаёт все), ALL_VOICEOVERS — все, иначе одна озвучка
+  const [selectedVoiceover, setSelectedVoiceover] = useState<string | null>(null);
+  const [studios, setStudios] = useState<UpdatesResponse["studios"]>([]);
   const [items, setItems] = useState<UpdateItem[]>([]);
   const [subscriptions, setSubscriptions] = useState<SubscriptionItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [pendingLink, setPendingLink] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
   const subscriptionIndex = useMemo(() => buildSubscriptionIndex(subscriptions), [subscriptions]);
+  const hasFavorites = favoriteVoiceovers.length > 0;
+  const showsAll = selectedVoiceover === ALL_VOICEOVERS || (selectedVoiceover === null && !hasFavorites);
+  const selectedLabel = selectedVoiceover === null ? describeVoiceovers(favoriteVoiceovers, 2) : selectedVoiceover === ALL_VOICEOVERS ? "Все озвучки" : selectedVoiceover;
+  // Озвучки из ленты; выбранная остаётся в списке, даже если после обновления её серий в ленте не стало
+  const studioChips = useMemo(() => {
+    if (!selectedVoiceover || selectedVoiceover === ALL_VOICEOVERS || studios.some((studio) => studio.name === selectedVoiceover)) {
+      return studios;
+    }
+    return [...studios, { name: selectedVoiceover, count: 0 }];
+  }, [studios, selectedVoiceover]);
 
   useEffect(() => {
     let cancelled = false;
@@ -32,6 +44,7 @@ export function Updates({ favoriteVoiceover, refreshKey }: UpdatesProps) {
       .then(([updatesData, subscriptionsData]) => {
         if (!cancelled) {
           setItems(updatesData.items);
+          setStudios(updatesData.studios);
           setSubscriptions(subscriptionsData.items);
         }
       })
@@ -88,15 +101,29 @@ export function Updates({ favoriteVoiceover, refreshKey }: UpdatesProps) {
           <h1>Свежие серии</h1>
           <p>Постеры, озвучки и быстрый переход к тайтлу в одном экране.</p>
         </div>
-        <Badge tone="red">{selectedVoiceover}</Badge>
+        <Badge tone="red">{selectedLabel}</Badge>
       </section>
 
       {notice ? <div className="notice">{notice}</div> : null}
 
       <div className="chip-row" aria-label="Фильтр озвучки">
-        {voiceovers.map((voiceover) => (
-          <button key={voiceover} className={voiceover === selectedVoiceover ? "chip chip--active" : "chip"} type="button" onClick={() => setSelectedVoiceover(voiceover)}>
-            {voiceover}
+        {hasFavorites ? (
+          <button className={selectedVoiceover === null ? "chip chip--active" : "chip"} type="button" onClick={() => setSelectedVoiceover(null)}>
+            ★ Любимые
+          </button>
+        ) : null}
+        <button className={showsAll ? "chip chip--active" : "chip"} type="button" onClick={() => setSelectedVoiceover(ALL_VOICEOVERS)}>
+          {ALL_VOICEOVERS}
+        </button>
+        {studioChips.map((studio) => (
+          <button
+            key={studio.name}
+            className={studio.name === selectedVoiceover ? "chip chip--active" : "chip"}
+            type="button"
+            onClick={() => setSelectedVoiceover(studio.name)}
+          >
+            {studio.name}
+            {studio.count ? <span className="chip__count">{studio.count}</span> : null}
           </button>
         ))}
       </div>
@@ -143,7 +170,7 @@ export function Updates({ favoriteVoiceover, refreshKey }: UpdatesProps) {
       {!loading && items.length === 0 ? (
         <Card className="empty-state">
           <Radio size={26} />
-          Для этой озвучки свежих серий пока нет.
+          {selectedVoiceover === null && hasFavorites ? "Для любимых озвучек свежих серий пока нет." : "Для этой озвучки свежих серий пока нет."}
         </Card>
       ) : null}
     </div>

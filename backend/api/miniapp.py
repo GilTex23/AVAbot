@@ -12,7 +12,7 @@ from fastapi import APIRouter, Depends, HTTPException, Request, status
 import config
 from database import requests as db
 from loader import bot
-from services import forecast, parser, stats
+from services import forecast, parser, stats, voiceovers
 from services.subscription_rules import subscription_block_reason
 
 logger = logging.getLogger(__name__)
@@ -103,7 +103,7 @@ async def get_me(current_user: dict = Depends(get_miniapp_user)):
         "id": tg_id,
         "username": user.username,
         "photo_url": user.photo_url,
-        "favorite_voiceover": user.favorite_voiceover,
+        "favorite_voiceovers": list(user.favorite_voiceovers or []),
         "quiet_hours_enabled": user.quiet_hours_enabled,
         "quiet_hours_start": user.quiet_hours_start,
         "quiet_hours_end": user.quiet_hours_end,
@@ -115,19 +115,44 @@ async def get_me(current_user: dict = Depends(get_miniapp_user)):
 
 @router.get("/updates")
 async def get_updates(voiceover: str | None = None, current_user: dict = Depends(get_miniapp_user)):
-    await sync_miniapp_user(current_user)
-    tg_id = int(current_user["id"])
-    selected_voiceover = voiceover
-    if not selected_voiceover:
-        selected_voiceover = await db.get_user_voiceover(tg_id) or "AniLiberty"
+    """
+    Свежие серии. Без voiceover — по любимым озвучкам пользователя (нет любимых — все),
+    voiceover=«Все» — все серии, иначе — одна озвучка. studios — озвучки, которые сейчас есть в ленте.
+    """
+    user = await sync_miniapp_user(current_user)
+    favorites = list(user.favorite_voiceovers or [])
 
-    updates = await parser.get_filtered(selected_voiceover, bot)
+    updates = await parser.get_updates(bot)
     if updates is None:
         raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail="AnimeGO is temporarily unavailable")
 
+    voiceover = (voiceover or "").strip()
+    if not voiceover:
+        mode, names = "favorites", favorites
+    elif voiceover == voiceovers.ALL_VOICEOVERS:
+        mode, names = "all", []
+    else:
+        mode, names = "voiceover", [voiceover]
+
     return {
-        "voiceover": selected_voiceover,
-        "items": updates,
+        "filter": mode,
+        "voiceover": voiceover or None,
+        "favorites": favorites,
+        "items": voiceovers.filter_updates(updates, names),
+        "studios": voiceovers.studios_in(updates),
+    }
+
+
+@router.get("/voiceovers")
+async def get_voiceovers(current_user: dict = Depends(get_miniapp_user)):
+    """Справочник озвучек, популярные первыми"""
+    await sync_miniapp_user(current_user)
+    return {
+        "items": [
+            {"id": item["id"], "name": item["name"], "releases": item["releases"], "subscriptions": item["subscriptions"]}
+            for item in await voiceovers.catalog()
+        ],
+        "popular_days": voiceovers.POPULAR_DAYS,
     }
 
 
@@ -245,15 +270,20 @@ async def update_timezone(payload: dict, current_user: dict = Depends(get_miniap
     return {"quiet_timezone": timezone}
 
 
-@router.put("/settings/voiceover")
-async def update_voiceover(payload: dict, current_user: dict = Depends(get_miniapp_user)):
+@router.put("/settings/voiceovers")
+async def update_favorite_voiceovers(payload: dict, current_user: dict = Depends(get_miniapp_user)):
+    """Любимые озвучки — названия из справочника; пустой список — все озвучки"""
     await sync_miniapp_user(current_user)
-    voiceover = (payload.get("voiceover") or "").strip()
-    if not voiceover:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Voiceover is required")
+    names = payload.get("voiceovers")
+    if not isinstance(names, list):
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="voiceovers must be a list")
+    try:
+        favorites = await voiceovers.validate_favorites(names)
+    except ValueError as e:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
 
-    await db.update_user_voiceover(int(current_user["id"]), voiceover)
-    return {"favorite_voiceover": voiceover}
+    await db.update_user_favorite_voiceovers(int(current_user["id"]), favorites)
+    return {"favorite_voiceovers": favorites}
 
 
 @router.put("/settings/quiet-hours")
