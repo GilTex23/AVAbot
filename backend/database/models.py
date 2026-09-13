@@ -1,5 +1,5 @@
 from sqlalchemy import BigInteger, Boolean, String, Column, ForeignKey, Integer, DateTime, Date, UniqueConstraint, Index, text
-from sqlalchemy.dialects.postgresql import ARRAY
+from sqlalchemy.dialects.postgresql import ARRAY, JSONB
 from sqlalchemy.orm import DeclarativeBase, relationship
 from sqlalchemy.ext.asyncio import AsyncAttrs
 import datetime
@@ -36,6 +36,44 @@ class AnimeTitle(Base):
     title = Column(String, nullable=False)
     poster_url = Column(String, nullable=True)
     updated_at = Column(DateTime, nullable=False, default=datetime.datetime.utcnow)
+
+    # Со страницы тайтла AnimeGO — по ним тайтл сопоставляется с Shikimori
+    alt_names = Column(ARRAY(String), nullable=False, default=list, server_default=text("'{}'"))
+    english_title = Column(String, nullable=True)
+    kind = Column(String, nullable=True)  # «Сериал», «Фильм», «OVA»...
+    aired_on = Column(Date, nullable=True)
+    episodes = Column(Integer, nullable=True)
+    # Когда эти данные последний раз менялись: незнакомый тайтл стоит поискать на Shikimori снова
+    meta_updated_at = Column(DateTime, nullable=True)
+
+    shikimori_id = Column(Integer, ForeignKey('shikimori_animes.id', ondelete='SET NULL'), nullable=True)
+    # pending — ещё не искали; matched — найден автоматически; manual — выбран админом;
+    # not_found / ambiguous — не нашли или кандидатов несколько (повтор позже); absent — админ: на Shikimori нет;
+    # error — Shikimori недоступен (повтор скоро)
+    shikimori_status = Column(String, nullable=False, default="pending", server_default="pending")
+    shikimori_checked_at = Column(DateTime, nullable=True)
+    shikimori_candidates = Column(JSONB, nullable=True)
+    shikimori_error = Column(String, nullable=True)
+
+    shikimori = relationship("ShikimoriAnime", lazy="joined")
+
+
+class ShikimoriAnime(Base):
+    """Данные тайтла с Shikimori; обновляются фоновой задачей"""
+    __tablename__ = 'shikimori_animes'
+
+    id = Column(Integer, primary_key=True, autoincrement=False)
+    name = Column(String, nullable=False)
+    russian = Column(String, nullable=True)
+    kind = Column(String, nullable=True)  # tv, movie, ova, ona, special...
+    status = Column(String, nullable=True)  # anons, ongoing, released
+    episodes = Column(Integer, nullable=True)  # 0 — неизвестно
+    episodes_aired = Column(Integer, nullable=True)
+    next_episode_at = Column(DateTime, nullable=True)  # UTC
+    aired_on = Column(Date, nullable=True)
+    released_on = Column(Date, nullable=True)
+    url = Column(String, nullable=True)
+    synced_at = Column(DateTime, nullable=False, default=datetime.datetime.utcnow)
 
 
 class Voiceover(Base):
@@ -107,13 +145,15 @@ class EpisodeRelease(Base):
 
 
 class EpisodeAiring(Base):
-    """Выход серии в Японии по расписанию на главной AnimeGO"""
+    """Выход серии в Японии: по расписанию на главной AnimeGO или, если его там нет, по Shikimori"""
     __tablename__ = 'episode_airings'
 
     anime_url = Column(String, primary_key=True)
     episode = Column(Integer, primary_key=True)
     air_at = Column(DateTime, nullable=False)  # UTC
     updated_at = Column(DateTime, nullable=False, default=datetime.datetime.utcnow)
+    # animego перезаписывает любое время, shikimori — только своё
+    source = Column(String, nullable=False, default="animego", server_default="animego")
 
 
 class DailyStat(Base):

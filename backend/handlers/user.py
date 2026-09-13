@@ -8,7 +8,7 @@ import html
 from database import requests as db
 from keyboards import inline
 import config
-from services import anime_titles, parser, stats, voiceovers
+from services import anime_titles, parser, shikimori_sync, stats, voiceovers
 from services.subscription_rules import subscription_block_reason
 from utils.states import UpdatesState, ScheduleState
 import logging
@@ -384,6 +384,7 @@ async def cb_add_from_list(callback: types.CallbackQuery, state: FSMContext):
     if success:
         await stats.increment("subscriptions.created", stats.SOURCE_BOT)
         await anime_titles.remember([anime])
+        shikimori_sync.kick(anime['link'])
 
     if success:
         total_str = info['total_episodes'] if info['total_episodes'] else "?"
@@ -577,6 +578,7 @@ async def cb_schedule_sub_finalize(callback: types.CallbackQuery, state: FSMCont
     if success:
         await stats.increment("subscriptions.created", stats.SOURCE_BOT)
         await anime_titles.remember([{"title": title, "link": url}])
+        shikimori_sync.kick(url)
         await callback.message.edit_text(
             f"✅ <b>Подписка оформлена!</b>\n\n"
             f"📺 {html.escape(title)}\n"

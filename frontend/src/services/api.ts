@@ -8,6 +8,7 @@ import type {
   ScheduleItem,
   ScraperKeyPatch,
   ScraperKeysOverview,
+  ShikimoriOverview,
   SubscriptionItem,
   UpdateItem,
   UpdatesResponse,
@@ -189,6 +190,18 @@ export function deleteAdminKey(id: number): Promise<ScraperKeysOverview> {
 
 export function refreshAdminKeys(id?: number): Promise<ScraperKeysOverview> {
   return fetchJson(id ? `/api/miniapp/admin/keys/${id}/refresh` : "/api/miniapp/admin/keys/refresh", { method: "POST" });
+}
+
+export function getAdminShikimori(): Promise<ShikimoriOverview> {
+  return fetchJson("/api/miniapp/admin/shikimori");
+}
+
+export function updateShikimoriMatch(animeId: number, payload: { shikimori: string | number } | { absent: true } | { recheck: true }): Promise<ShikimoriOverview> {
+  return fetchJson(`/api/miniapp/admin/shikimori/${animeId}`, { method: "PUT", body: JSON.stringify(payload) });
+}
+
+export function runShikimoriSync(): Promise<{ started: boolean }> {
+  return fetchJson("/api/miniapp/admin/shikimori/sync", { method: "POST" });
 }
 
 export function runSubscriptionsCheck(): Promise<{ started: boolean }> {

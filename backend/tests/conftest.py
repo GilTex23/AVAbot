@@ -22,6 +22,10 @@ os.environ.update({
     "ANIMEGO_DIRECT_ENABLED": "false",
     "ANIMEGO_CACHE_TTL_SECONDS": "0",
     "MINIAPP_DEV_AUTH_ENABLED": "false",
+    "MINIAPP_URL": "",
+    # Тесты не ходят в настоящий Shikimori: нужные тесты включают его и поднимают локальный сервер
+    "SHIKIMORI_ENABLED": "false",
+    "SHIKIMORI_URL": "http://127.0.0.1:9",
 })
 if str(BACKEND_DIR) not in sys.path:
     sys.path.insert(0, str(BACKEND_DIR))

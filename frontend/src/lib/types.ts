@@ -20,6 +20,53 @@ export type UpdateItem = {
   poster_url?: string;
 };
 
+export type ShikimoriTitleStatus = "pending" | "matched" | "manual" | "not_found" | "ambiguous" | "absent" | "error";
+
+export type ShikimoriCandidate = {
+  id: number;
+  name?: string | null;
+  russian?: string | null;
+  kind?: string | null;
+  year?: number | null;
+  episodes?: number | null;
+  url?: string | null;
+  score?: number | null;
+};
+
+export type ShikimoriTitle = {
+  id: number;
+  title: string;
+  url: string;
+  poster_url?: string | null;
+  subscriptions: number;
+  status: ShikimoriTitleStatus;
+  checked_at?: string | null;
+  error?: string | null;
+  /** Данные со страницы AnimeGO, по которым ищется тайтл */
+  animego: { english_title?: string | null; kind?: string | null; year?: number | null; episodes?: number | null };
+  shikimori?: {
+    id: number;
+    name: string;
+    russian?: string | null;
+    kind?: string | null;
+    status?: string | null;
+    episodes?: number | null;
+    episodes_aired?: number | null;
+    next_episode_at?: string | null;
+    year?: number | null;
+    url?: string | null;
+    synced_at?: string | null;
+  } | null;
+  candidates: ShikimoriCandidate[];
+};
+
+export type ShikimoriOverview = {
+  enabled: boolean;
+  running: boolean;
+  summary: Record<ShikimoriTitleStatus, number>;
+  titles: ShikimoriTitle[];
+};
+
 export type UpdatesResponse = {
   /** favorites — по любимым озвучкам (нет любимых — все), all — все, voiceover — одна озвучка */
   filter: "favorites" | "all" | "voiceover";

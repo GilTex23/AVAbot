@@ -8,7 +8,7 @@ from fastapi.staticfiles import StaticFiles
 from uvicorn.middleware.proxy_headers import ProxyHeadersMiddleware
 from aiogram import types
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
-from datetime import datetime
+from datetime import datetime, timedelta
 
 BACKEND_DIR = Path(__file__).resolve().parent
 ROOT_DIR = BACKEND_DIR.parent
@@ -28,7 +28,7 @@ from middlewares.callback import CallbackAnswerMiddleware
 from services.logger import setup_logger
 from services.checker import check_updates, check_subscriptions_status
 from services.notifier import notify_admins
-from services import bot_setup, scraper_keys, stats
+from services import bot_setup, scraper_keys, shikimori_sync, stats
 from database.requests import init_db, engine
 
 from services.admin_panel import authentication_backend, UserAdmin, SubscriptionAdmin
@@ -75,6 +75,9 @@ async def lifespan(app: FastAPI):
     scheduler.add_job(check_subscriptions_status, "cron", hour=21, minute=0, args=[bot], id="subscriptions_status_checker", replace_existing=True)
     # /account не тратит кредиты; первый опрос сразу после старта
     scheduler.add_job(scraper_keys.refresh_all_keys, "interval", hours=6, args=[bot], id="scraper_keys_refresh", replace_existing=True, next_run_time=datetime.now())
+    # Shikimori: сопоставление тайтлов с подписками, число серий и время выхода оригинала
+    scheduler.add_job(shikimori_sync.sync, "interval", hours=3, id="shikimori_sync", replace_existing=True,
+                      next_run_time=datetime.now() + timedelta(minutes=2))
     # Статистика и история старше 180 дней
     scheduler.add_job(stats.prune_old_stats, "cron", hour=4, minute=30, id="stats_prune", replace_existing=True)
     scheduler.start()

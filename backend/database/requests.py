@@ -1,9 +1,9 @@
 from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
-from sqlalchemy import select, update, delete, and_, func, text
+from sqlalchemy import select, update, delete, and_, case, func, text
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.orm import joinedload
 from database.models import (
-    Base, User, Subscription, AnimeTitle, Voiceover, ScraperApiKey, ScraperApiKeyUsage, EpisodeRelease, EpisodeAiring,
+    Base, User, Subscription, AnimeTitle, ShikimoriAnime, Voiceover, ScraperApiKey, ScraperApiKeyUsage, EpisodeRelease, EpisodeAiring,
     DailyStat, UserActivity, ScraperKeySnapshot,
 )
 import datetime
@@ -120,6 +120,113 @@ async def upsert_anime_titles(rows: list[dict]):
 async def get_anime_title(anime_id: int):
     async with async_session() as session:
         return await session.get(AnimeTitle, anime_id)
+
+
+async def upsert_title_meta(row: dict):
+    """
+    row: id, url, title, poster_url, alt_names, english_title, kind, aired_on, episodes — со страницы тайтла.
+    meta_updated_at меняется, только если данные для поиска на Shikimori действительно изменились
+    """
+    now = datetime.datetime.utcnow()
+    async with async_session() as session:
+        stmt = pg_insert(AnimeTitle).values({**row, "updated_at": now, "meta_updated_at": now})
+        excluded = stmt.excluded
+        changed = (
+            AnimeTitle.title.is_distinct_from(excluded.title)
+            | AnimeTitle.alt_names.is_distinct_from(excluded.alt_names)
+            | AnimeTitle.english_title.is_distinct_from(excluded.english_title)
+            | AnimeTitle.kind.is_distinct_from(excluded.kind)
+            | AnimeTitle.aired_on.is_distinct_from(excluded.aired_on)
+            | AnimeTitle.episodes.is_distinct_from(excluded.episodes)
+        )
+        stmt = stmt.on_conflict_do_update(
+            index_elements=[AnimeTitle.id],
+            set_={
+                "url": excluded.url,
+                "title": excluded.title,
+                "poster_url": func.coalesce(excluded.poster_url, AnimeTitle.poster_url),
+                "alt_names": excluded.alt_names,
+                "english_title": excluded.english_title,
+                "kind": excluded.kind,
+                "aired_on": excluded.aired_on,
+                "episodes": excluded.episodes,
+                "updated_at": excluded.updated_at,
+                "meta_updated_at": case((changed, excluded.meta_updated_at), else_=AnimeTitle.meta_updated_at),
+            },
+        )
+        await session.execute(stmt)
+        await session.commit()
+
+
+async def get_subscribed_titles():
+    """Тайтлы, на которые есть подписки, с данными Shikimori и числом подписок: [(AnimeTitle, count)]"""
+    counts = (
+        select(Subscription.anime_url, func.count(Subscription.id).label("subscriptions"))
+        .group_by(Subscription.anime_url)
+        .subquery()
+    )
+    async with async_session() as session:
+        result = await session.execute(
+            select(AnimeTitle, counts.c.subscriptions)
+            .join(counts, counts.c.anime_url == AnimeTitle.url)
+            .order_by(counts.c.subscriptions.desc(), AnimeTitle.title)
+        )
+        return [(title, count) for title, count in result.unique().all()]
+
+
+async def get_titles_by_urls(urls: set[str]) -> dict:
+    if not urls:
+        return {}
+    async with async_session() as session:
+        result = await session.scalars(select(AnimeTitle).where(AnimeTitle.url.in_(urls)))
+        return {title.url: title for title in result.unique().all()}
+
+
+async def get_title_by_url(url: str):
+    return (await get_titles_by_urls({url})).get(url)
+
+
+async def set_title_shikimori(anime_id: int, status: str, shikimori_id: int | None = None,
+                              candidates: list | None = None, error: str | None = None):
+    async with async_session() as session:
+        await session.execute(
+            update(AnimeTitle).where(AnimeTitle.id == anime_id).values(
+                shikimori_status=status,
+                shikimori_id=shikimori_id,
+                shikimori_candidates=candidates,
+                shikimori_error=error,
+                shikimori_checked_at=datetime.datetime.utcnow(),
+            )
+        )
+        await session.commit()
+
+
+async def upsert_shikimori_animes(rows: list[dict]):
+    rows = list({row["id"]: row for row in rows}.values())
+    if not rows:
+        return
+    now = datetime.datetime.utcnow()
+    async with async_session() as session:
+        stmt = pg_insert(ShikimoriAnime).values([{**row, "synced_at": now} for row in rows])
+        stmt = stmt.on_conflict_do_update(
+            index_elements=[ShikimoriAnime.id],
+            set_={column: stmt.excluded[column] for column in rows[0] if column != "id"} | {"synced_at": stmt.excluded.synced_at},
+        )
+        await session.execute(stmt)
+        await session.commit()
+
+
+async def get_max_released_episodes(urls: set[str]) -> dict[str, int]:
+    """Самая большая серия в ленте по тайтлу (любая озвучка)"""
+    if not urls:
+        return {}
+    async with async_session() as session:
+        result = await session.execute(
+            select(EpisodeRelease.anime_url, func.max(EpisodeRelease.episode))
+            .where(EpisodeRelease.anime_url.in_(urls))
+            .group_by(EpisodeRelease.anime_url)
+        )
+        return dict(result.all())
 
 
 # --- VOICEOVERS ---
@@ -280,16 +387,20 @@ async def record_episode_releases(rows: list[dict]):
         await session.commit()
 
 
-async def record_episode_airings(rows: list[dict]):
-    """rows: anime_url, episode, air_at. Время выхода обновляется, если расписание сдвинули"""
+async def record_episode_airings(rows: list[dict], source: str = "animego"):
+    """
+    rows: anime_url, episode, air_at. Время выхода обновляется, если расписание сдвинули.
+    Расписание AnimeGO перезаписывает любое время, Shikimori — только время, которое сам и записал
+    """
     if not rows:
         return
     now = datetime.datetime.utcnow()
     async with async_session() as session:
-        stmt = pg_insert(EpisodeAiring).values([{**row, "updated_at": now} for row in rows])
+        stmt = pg_insert(EpisodeAiring).values([{**row, "updated_at": now, "source": source} for row in rows])
         stmt = stmt.on_conflict_do_update(
             index_elements=[EpisodeAiring.anime_url, EpisodeAiring.episode],
-            set_={"air_at": stmt.excluded.air_at, "updated_at": stmt.excluded.updated_at},
+            set_={"air_at": stmt.excluded.air_at, "updated_at": stmt.excluded.updated_at, "source": stmt.excluded.source},
+            where=None if source == "animego" else EpisodeAiring.source == source,
         )
         await session.execute(stmt)
         await session.commit()

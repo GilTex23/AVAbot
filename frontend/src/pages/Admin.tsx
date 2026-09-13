@@ -1,6 +1,8 @@
-import { ArrowLeft, BarChart3, Check, ChevronRight, KeyRound, ListChecks, Loader2, Pencil, Plus, RefreshCw, Trash2, X } from "lucide-react";
+import { ArrowLeft, BarChart3, Check, ChevronRight, KeyRound, Link2, ListChecks, Loader2, Pencil, Plus, RefreshCw, Trash2, X } from "lucide-react";
 import { useCallback, useEffect, useState, type FormEvent } from "react";
+import { AdminShikimori } from "./AdminShikimori";
 import { AdminStats } from "./AdminStats";
+import { describeAdminError } from "../lib/adminErrors";
 import { Badge } from "../components/ui/badge";
 import { Button } from "../components/ui/button";
 import { Card } from "../components/ui/card";
@@ -80,20 +82,7 @@ function formatDate(iso: string, withYear = true) {
   return new Date(iso).toLocaleDateString("ru-RU", { day: "numeric", month: "short", ...(withYear ? { year: "numeric" } : {}) });
 }
 
-function describeError(error: unknown, fallback: string) {
-  if (error instanceof ApiError) {
-    if (error.status === 401) {
-      return "Сессия Telegram устарела — закройте и снова откройте мини-апп.";
-    }
-    if (error.status === 403) {
-      return "Нет доступа к админке.";
-    }
-    if (error.status < 500 || error.status === 502) {
-      return error.message;
-    }
-  }
-  return fallback;
-}
+const describeError = describeAdminError;
 
 function keyBadge(key: ScraperKey): { label: string; tone: Tone } {
   if (key.decrypt_error) {
@@ -106,18 +95,21 @@ function keyBadge(key: ScraperKey): { label: string; tone: Tone } {
 }
 
 export function Admin({ refreshKey, onBack }: AdminProps) {
-  const [view, setView] = useState<"main" | "stats">("main");
+  const [view, setView] = useState<"main" | "stats" | "shikimori">("main");
   const openStats = useCallback(() => setView("stats"), []);
-  const closeStats = useCallback(() => setView("main"), []);
+  const openShikimori = useCallback(() => setView("shikimori"), []);
+  const closeView = useCallback(() => setView("main"), []);
 
-  return view === "stats" ? (
-    <AdminStats refreshKey={refreshKey} onBack={closeStats} />
-  ) : (
-    <AdminMain refreshKey={refreshKey} onBack={onBack} onOpenStats={openStats} />
-  );
+  if (view === "stats") {
+    return <AdminStats refreshKey={refreshKey} onBack={closeView} />;
+  }
+  if (view === "shikimori") {
+    return <AdminShikimori refreshKey={refreshKey} onBack={closeView} />;
+  }
+  return <AdminMain refreshKey={refreshKey} onBack={onBack} onOpenStats={openStats} onOpenShikimori={openShikimori} />;
 }
 
-function AdminMain({ refreshKey, onBack, onOpenStats }: AdminProps & { onOpenStats: () => void }) {
+function AdminMain({ refreshKey, onBack, onOpenStats, onOpenShikimori }: AdminProps & { onOpenStats: () => void; onOpenShikimori: () => void }) {
   const [data, setData] = useState<ScraperKeysOverview | null>(null);
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState<string | null>(null);
@@ -210,6 +202,17 @@ function AdminMain({ refreshKey, onBack, onOpenStats }: AdminProps & { onOpenSta
           <span className="settings-link__text">
             <span className="settings-link__title">Статистика</span>
             <span className="settings-link__caption">Запросы и ключи, бот, база данных и сервер — с графиками</span>
+          </span>
+        </span>
+        <ChevronRight size={20} />
+      </button>
+
+      <button type="button" className="card settings-card settings-link" onClick={onOpenShikimori}>
+        <span className="settings-card__head">
+          <Link2 size={22} />
+          <span className="settings-link__text">
+            <span className="settings-link__title">Shikimori</span>
+            <span className="settings-link__caption">Сопоставление тайтлов: не найденные, неоднозначные, ручной выбор</span>
           </span>
         </span>
         <ChevronRight size={20} />

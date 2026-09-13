@@ -1,15 +1,18 @@
 """Приветствие, команды, ссылки на тайтлы и настройка меню бота."""
 import datetime as dt
 
+import httpx
 from aiogram import Bot
 from aiogram.methods import AnswerCallbackQuery, EditMessageText, SendMessage, SetChatMenuButton, SetMyCommands
+from fastapi import FastAPI
 from sqlalchemy import select
 
 import config
+from api.miniapp import router as miniapp_router
 from database.models import Subscription
 from services import anime_titles, bot_setup, forecast, parser
 from test_bot_voiceovers import USER_ID, RecordingSession, button, buttons, telegram  # noqa: F401 — фикстура telegram
-from test_db_flows import add_sub
+from test_db_flows import add_sub, init_data
 
 TITLE_URL = "https://animego.me/anime/ochen-dlinnoe-nazvanie-taitla-kotoroe-ne-vlezet-v-payload-start-3484"
 DETAILS = {"type": "ТВ Сериал", "status": "Онгоинг", "total_episodes": 12, "available_voiceovers": ["AniDUB", "AniLiberty"]}
@@ -135,3 +138,22 @@ async def test_configure_bot(monkeypatch):
     await bot_setup.configure_bot(bot)
     assert "app" in [command.command for command in session.last(SetMyCommands).commands]
     assert session.last(SetChatMenuButton).menu_button.web_app.url == "https://miniapp.example.com"
+
+
+async def test_miniapp_schedule_subscription_starts_from_last_release(database, monkeypatch):
+    await database.record_episode_releases([
+        {"anime_url": TITLE_URL, "anime_title": "Тайтл", "studio": "AniLiberty", "episode": 6, "released_at": dt.datetime.utcnow()},
+    ])
+
+    async def fake_info(url, bot):
+        return {"type": "Сериал", "status": "Онгоинг", "total_episodes": 12}
+
+    monkeypatch.setattr(parser, "get_anime_info", fake_info)
+    app = FastAPI()
+    app.include_router(miniapp_router)
+    async with httpx.AsyncClient(transport=httpx.ASGITransport(app=app), base_url="http://test") as http:
+        response = await http.post("/api/miniapp/subscriptions", headers=init_data(80), json={
+            "title": "Тайтл", "link": TITLE_URL, "episode": "Серия 0", "voiceover": "AniLiberty",
+        })
+    assert response.json()["created"] is True
+    assert (await database.get_user_subscriptions(80))[0].last_episode == "Серия 6"

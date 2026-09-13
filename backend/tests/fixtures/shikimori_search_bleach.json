@@ -1,0 +1,134 @@
+[
+ {
+  "id": "60636",
+  "name": "Bleach: Sennen Kessen-hen - Kashin-tan",
+  "russian": "Блич: Тысячелетняя кровавая война — Бедствие",
+  "english": "Bleach: Thousand-Year Blood War - The Calamity",
+  "japanese": "BLEACH 千年血戦篇-禍進譚-",
+  "synonyms": [],
+  "kind": "tv",
+  "status": "ongoing",
+  "episodes": 10,
+  "episodesAired": 8,
+  "airedOn": {
+   "date": "2026-07-25"
+  },
+  "releasedOn": {
+   "date": "2026-10-27"
+  },
+  "nextEpisodeAt": "2026-09-19T17:00:00+03:00",
+  "url": "https://shikimori.io/animes/60636-bleach-sennen-kessen-hen-kashin-tan"
+ },
+ {
+  "id": "41467",
+  "name": "Bleach: Sennen Kessen-hen",
+  "russian": "Блич: Тысячелетняя кровавая война",
+  "english": "Bleach: Thousand-Year Blood War",
+  "japanese": "BLEACH 千年血戦篇",
+  "synonyms": [
+   "Блич 2",
+   "Bleach: Thousand-Year Blood War Arc"
+  ],
+  "kind": "tv",
+  "status": "released",
+  "episodes": 13,
+  "episodesAired": 13,
+  "airedOn": {
+   "date": "2022-10-11"
+  },
+  "releasedOn": {
+   "date": "2022-12-27"
+  },
+  "nextEpisodeAt": null,
+  "url": "https://shikimori.io/animes/41467-bleach-sennen-kessen-hen"
+ },
+ {
+  "id": "53998",
+  "name": "Bleach: Sennen Kessen-hen - Ketsubetsu-tan",
+  "russian": "Блич: Тысячелетняя кровавая война — Прощание",
+  "english": "Bleach: Thousand-Year Blood War - The Separation",
+  "japanese": "BLEACH 千年血戦篇-訣別譚-",
+  "synonyms": [
+   "Bleach: Thousand-Year Blood War Arc Part 2"
+  ],
+  "kind": "tv",
+  "status": "released",
+  "episodes": 13,
+  "episodesAired": 13,
+  "airedOn": {
+   "date": "2023-07-08"
+  },
+  "releasedOn": {
+   "date": "2023-09-30"
+  },
+  "nextEpisodeAt": null,
+  "url": "https://shikimori.io/animes/53998-bleach-sennen-kessen-hen-ketsubetsu-tan"
+ },
+ {
+  "id": "56784",
+  "name": "Bleach: Sennen Kessen-hen - Soukoku-tan",
+  "russian": "Блич: Тысячелетняя кровавая война — Конфликт",
+  "english": "Bleach: Thousand-Year Blood War - The Conflict",
+  "japanese": "BLEACH 千年血戦篇-相剋譚-",
+  "synonyms": [
+   "Bleach: Thousand-Year Blood War Arc Part 3"
+  ],
+  "kind": "tv",
+  "status": "released",
+  "episodes": 14,
+  "episodesAired": 14,
+  "airedOn": {
+   "date": "2024-10-05"
+  },
+  "releasedOn": {
+   "date": "2024-12-28"
+  },
+  "nextEpisodeAt": null,
+  "url": "https://shikimori.io/animes/56784-bleach-sennen-kessen-hen-soukoku-tan"
+ },
+ {
+  "id": "56442",
+  "name": "Bleach: Sennen Kessen-hen - Ketsubetsu-tan Recap",
+  "russian": "Блич: Тысячелетняя кровавая война — Прощание. Рекап",
+  "english": "Bleach: Thousand-Year Blood War - The Separation Recap",
+  "japanese": "BLEACH 千年血戦篇-訣別譚-",
+  "synonyms": [
+   "Bleach: Sennen Kessen-hen - Ketsubetsu-tan Episode 21.5"
+  ],
+  "kind": "tv_special",
+  "status": "released",
+  "episodes": 1,
+  "episodesAired": 0,
+  "airedOn": {
+   "date": "2023-09-02"
+  },
+  "releasedOn": {
+   "date": null
+  },
+  "nextEpisodeAt": null,
+  "url": "https://shikimori.io/animes/56442-bleach-sennen-kessen-hen-ketsubetsu-tan-recap"
+ },
+ {
+  "id": "51517",
+  "name": "Zhan Qiannian",
+  "russian": "Война королевств",
+  "english": "Millenniums Of Warring States",
+  "japanese": "战千年",
+  "synonyms": [
+   "Тысячелетняя война",
+   "Warring States Of A Millenia"
+  ],
+  "kind": "ona",
+  "status": "released",
+  "episodes": 16,
+  "episodesAired": 16,
+  "airedOn": {
+   "date": "2022-07-23"
+  },
+  "releasedOn": {
+   "date": "2022-10-29"
+  },
+  "nextEpisodeAt": null,
+  "url": "https://shikimori.io/animes/51517-zhan-qiannian"
+ }
+]

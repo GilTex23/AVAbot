@@ -1,5 +1,5 @@
 from aiogram import Bot
-from services import forecast, health, parser, stats
+from services import forecast, health, parser, shikimori_sync, stats
 from services.notifier import notify_admins
 from utils.antispam import AntiSpamNotify
 from database import requests as db
@@ -192,6 +192,7 @@ async def check_subscriptions_status(bot: Bot, notify_summary: bool = False, for
     - снимает подписки, где озвучка дошла до последней серии;
     - снимает подписки на вышедшие тайтлы без новых серий дольше STALE_SUBSCRIPTION_DAYS.
     Страница тайтла запрашивается один раз на URL и не чаще INFO_RECHECK_DAYS (force — без этого ограничения).
+    Если тайтл сопоставлен с Shikimori и данные сходятся с AnimeGO, страница не нужна — число серий и статус берутся оттуда.
     """
     if _status_check_lock.locked():
         logger.info("Subscriptions status check is already running")
@@ -199,7 +200,7 @@ async def check_subscriptions_status(bot: Bot, notify_summary: bool = False, for
 
     stats.set_source(stats.SOURCE_STATUS_CHECK)
     async with _status_check_lock:
-        counts = {"checked_urls": 0, "failed_urls": 0, "updated_totals": 0, "completed": 0, "stale": 0}
+        counts = {"checked_urls": 0, "failed_urls": 0, "shikimori_urls": 0, "updated_totals": 0, "completed": 0, "stale": 0}
         try:
             logger.info("Starting subscriptions status check...")
             subscriptions = await db.get_all_subscriptions()
@@ -226,17 +227,22 @@ async def check_subscriptions_status(bot: Bot, notify_summary: bool = False, for
                     if any(sub.info_checked_at is None or sub.info_checked_at < recheck_before for sub in subs)
                 }
 
+            titles = await db.get_titles_by_urls(set(url_map))
             for url, subs in url_map.items():
-                info = await parser.get_anime_info(url, bot)
-                counts["checked_urls"] += 1
-                if not info:
-                    counts["failed_urls"] += 1
-                    continue
+                from_shikimori = shikimori_sync.status_from_shikimori(titles.get(url), subs, now)
+                if from_shikimori is not None:
+                    counts["shikimori_urls"] += 1
+                    total, released = from_shikimori["total_episodes"], from_shikimori["released"]
+                else:
+                    info = await parser.get_anime_info(url, bot)
+                    counts["checked_urls"] += 1
+                    if not info:
+                        counts["failed_urls"] += 1
+                        continue
+                    total = info.get('total_episodes')
+                    released = bool(info.get('status')) and "Вышел" in info['status']
 
                 await db.mark_anime_info_checked(url)
-
-                total = info.get('total_episodes')
-                released = bool(info.get('status')) and "Вышел" in info['status']
 
                 for sub in subs:
                     if total and sub.total_episodes != total:
@@ -267,6 +273,7 @@ async def check_subscriptions_status(bot: Bot, notify_summary: bool = False, for
                 bot,
                 "Проверка подписок завершена.\n\n"
                 f"Страниц проверено: <b>{counts['checked_urls']}</b> (ошибок: {counts['failed_urls']})\n"
+                f"По данным Shikimori, без страницы: <b>{counts['shikimori_urls']}</b>\n"
                 f"Обновлено число серий: <b>{counts['updated_totals']}</b>\n"
                 f"Завершённых снято: <b>{counts['completed']}</b>\n"
                 f"Брошенных озвучек снято: <b>{counts['stale']}</b>",

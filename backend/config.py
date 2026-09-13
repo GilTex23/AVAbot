@@ -32,6 +32,12 @@ try:
         logger.warning("MINIAPP_URL must start with https:// — Telegram opens mini apps only over HTTPS; ignoring it")
         MINIAPP_URL = ""
 
+    # Shikimori: число серий, статус и время выхода оригинала для тайтлов с подписками (бесплатно, без ScraperAPI)
+    SHIKIMORI_ENABLED = os.getenv("SHIKIMORI_ENABLED", "true").lower() in ("1", "true", "yes", "on")
+    SHIKIMORI_URL = os.getenv("SHIKIMORI_URL", "https://shikimori.io").rstrip("/")
+    # Shikimori просит указывать в User-Agent название приложения
+    SHIKIMORI_USER_AGENT = os.getenv("SHIKIMORI_USER_AGENT", "AnimeVoiceNotifier")
+
     # Шифрует ключи ScraperAPI в БД. Если его поменять, сохранённые ключи перестанут расшифровываться
     SCRAPER_KEYS_SECRET = os.getenv("SCRAPER_KEYS_SECRET", "")
     if not SCRAPER_KEYS_SECRET:

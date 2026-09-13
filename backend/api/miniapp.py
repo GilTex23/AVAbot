@@ -12,7 +12,7 @@ from fastapi import APIRouter, Depends, HTTPException, Request, status
 import config
 from database import requests as db
 from loader import bot
-from services import anime_titles, forecast, parser, stats, voiceovers
+from services import anime_titles, forecast, parser, shikimori_sync, stats, voiceovers
 from services.subscription_rules import subscription_block_reason
 
 logger = logging.getLogger(__name__)
@@ -201,6 +201,13 @@ async def add_subscription(payload: dict, current_user: dict = Depends(get_minia
     if reason:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=reason)
 
+    if parser.max_episode_number(episode) == 0:
+        # Подписка из расписания: уже вышедшие в озвучке серии не присылаем — начинаем с последней из истории ленты
+        releases = await db.get_episode_releases({link})
+        last_known = max((release.episode for release in releases if voiceovers.matches(voiceover, release.studio)), default=None)
+        if last_known:
+            episode = f"Серия {last_known}"
+
     payload_total = payload.get("total_episodes")
     total_episodes = payload_total if payload_total is not None else (info.get("total_episodes") if info else None)
     created = await db.add_subscription(
@@ -215,6 +222,7 @@ async def add_subscription(payload: dict, current_user: dict = Depends(get_minia
     if created:
         await stats.increment("subscriptions.created", stats.SOURCE_MINIAPP)
         await anime_titles.remember([{"title": title, "link": link, "poster_url": poster_url}])
+        shikimori_sync.kick(link)
     return {"ok": True, "created": created}
 
 

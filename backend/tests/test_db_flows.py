@@ -174,7 +174,7 @@ async def test_subscriptions_status_check(database, fake_bot, monkeypatch):
     alive = {name for name, sub_id in ids.items() if await get_sub(database, sub_id)}
     assert alive == {"lagging", "stale_ongoing", "fresh"}
     assert (await get_sub(database, ids["lagging"])).total_episodes == 14
-    assert stats == {"checked_urls": 3, "failed_urls": 0, "updated_totals": 2, "completed": 2, "stale": 1}
+    assert stats == {"checked_urls": 3, "failed_urls": 0, "shikimori_urls": 0, "updated_totals": 2, "completed": 2, "stale": 1}
 
     requested.clear()
     await checker.check_subscriptions_status(fake_bot)

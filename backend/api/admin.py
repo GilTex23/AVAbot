@@ -9,7 +9,7 @@ import config
 from api.miniapp import validate_init_data
 from database import requests as db
 from loader import bot
-from services import checker, health, scraper_keys, stats
+from services import checker, health, scraper_keys, shikimori, shikimori_sync, stats
 
 router = APIRouter(prefix="/api/miniapp/admin", tags=["miniapp-admin"])
 
@@ -219,6 +219,109 @@ async def run_subscriptions_check(_: dict = Depends(require_admin)):
 
     # Полная проверка без недельного ограничения; может идти долго, итог придёт админам в Telegram
     task = asyncio.create_task(checker.check_subscriptions_status(bot, notify_summary=True, force=True))
+    _background_tasks.add(task)
+    task.add_done_callback(_background_tasks.discard)
+    return {"started": True}
+
+
+# --- SHIKIMORI ---
+# Сначала то, что требует внимания админа
+SHIKIMORI_STATUS_ORDER = ("ambiguous", "not_found", "error", "pending", "absent", "manual", "matched")
+
+
+def _serialize_title(title, subscriptions: int) -> dict:
+    anime = title.shikimori
+    return {
+        "id": title.id,
+        "title": title.title,
+        "url": title.url,
+        "poster_url": title.poster_url,
+        "subscriptions": subscriptions,
+        "status": title.shikimori_status,
+        "checked_at": _iso(title.shikimori_checked_at),
+        "error": title.shikimori_error,
+        "animego": {
+            "english_title": title.english_title,
+            "kind": title.kind,
+            "year": title.aired_on.year if title.aired_on else None,
+            "episodes": title.episodes,
+        },
+        "shikimori": {
+            "id": anime.id,
+            "name": anime.name,
+            "russian": anime.russian,
+            "kind": anime.kind,
+            "status": anime.status,
+            "episodes": anime.episodes or None,
+            "episodes_aired": anime.episodes_aired,
+            "next_episode_at": _iso(anime.next_episode_at),
+            "year": anime.aired_on.year if anime.aired_on else None,
+            "url": anime.url,
+            "synced_at": _iso(anime.synced_at),
+        } if anime and title.shikimori_status in shikimori_sync.MATCHED_STATUSES else None,
+        "candidates": title.shikimori_candidates or [],
+    }
+
+
+async def _shikimori_overview() -> dict:
+    rows = await db.get_subscribed_titles()
+    summary = {name: 0 for name in SHIKIMORI_STATUS_ORDER}
+    for title, _ in rows:
+        summary[title.shikimori_status] = summary.get(title.shikimori_status, 0) + 1
+    order = {name: index for index, name in enumerate(SHIKIMORI_STATUS_ORDER)}
+    rows.sort(key=lambda row: (order.get(row[0].shikimori_status, len(order)), -row[1], row[0].title.lower()))
+    return {
+        "enabled": config.SHIKIMORI_ENABLED,
+        "running": shikimori_sync.is_sync_running(),
+        "summary": summary,
+        "titles": [_serialize_title(title, count) for title, count in rows],
+    }
+
+
+@router.get("/shikimori")
+async def get_shikimori(_: dict = Depends(require_admin)):
+    """Тайтлы с подписками и их сопоставление с Shikimori"""
+    return await _shikimori_overview()
+
+
+@router.put("/shikimori/{anime_id}")
+async def update_shikimori_match(anime_id: int, payload: dict, _: dict = Depends(require_admin)):
+    """
+    {"shikimori": id или ссылка} — выбрать тайтл вручную; {"absent": true} — на Shikimori его нет;
+    {"recheck": true} — искать заново автоматически
+    """
+    title = await db.get_anime_title(anime_id)
+    if title is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Тайтл не найден")
+    if not config.SHIKIMORI_ENABLED and not payload.get("absent"):
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Shikimori выключен (SHIKIMORI_ENABLED=false)")
+
+    try:
+        if payload.get("absent"):
+            await db.set_title_shikimori(anime_id, "absent", candidates=title.shikimori_candidates)
+        elif payload.get("recheck"):
+            await shikimori_sync.match_title(title)
+        else:
+            shikimori_id = shikimori.parse_id(payload.get("shikimori"))
+            if shikimori_id is None:
+                raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Укажите id или ссылку на тайтл Shikimori")
+            await shikimori_sync.set_manual(anime_id, shikimori_id)
+    except LookupError as e:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e))
+    except shikimori.ShikimoriError as e:
+        raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail=f"Shikimori недоступен: {e}")
+    return await _shikimori_overview()
+
+
+@router.post("/shikimori/sync")
+async def run_shikimori_sync(_: dict = Depends(require_admin)):
+    if not config.SHIKIMORI_ENABLED:
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Shikimori выключен (SHIKIMORI_ENABLED=false)")
+    if shikimori_sync.is_sync_running():
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Синхронизация с Shikimori уже идёт")
+
+    # Повторный поиск всех несопоставленных тайтлов и обновление данных; ответ сразу, результат — по кнопке «Обновить»
+    task = asyncio.create_task(shikimori_sync.sync(force=True))
     _background_tasks.add(task)
     task.add_done_callback(_background_tasks.discard)
     return {"started": True}

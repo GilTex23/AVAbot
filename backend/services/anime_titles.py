@@ -33,6 +33,26 @@ def parse_payload(payload: str | None) -> int | None:
     return int(match.group(1)) if match else None
 
 
+async def remember_meta(url: str, meta: dict) -> None:
+    """Данные со страницы тайтла (parser.parse_title_meta) — для поиска на Shikimori"""
+    url = (url or "").split("#")[0].rstrip("/")
+    found = anime_id(url)
+    title = (meta.get("title") or "").strip()
+    if found is None or not title:
+        return
+    await db.upsert_title_meta({
+        "id": found,
+        "url": url,
+        "title": title,
+        "poster_url": meta.get("poster_url") or None,
+        "alt_names": list(meta.get("alt_names") or []),
+        "english_title": meta.get("english_title"),
+        "kind": meta.get("kind"),
+        "aired_on": meta.get("aired_on"),
+        "episodes": meta.get("episodes"),
+    })
+
+
 async def remember(items) -> None:
     """items: словари с title, link и poster_url (как в ленте и расписании). Ошибка не мешает основной работе"""
     rows = []

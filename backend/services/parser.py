@@ -1,4 +1,5 @@
 import datetime
+import json
 import re
 from collections import Counter
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
@@ -12,7 +13,7 @@ import config
 from aiogram import Bot
 from services.notifier import notify_admins
 from services.scraper_keys import key_pool, STATUS_EXHAUSTED, STATUS_INVALID
-from services import stats, timezone_alerts, voiceovers
+from services import anime_titles, stats, timezone_alerts, voiceovers
 from services.timezone_labels import TIMEZONE_LABELS
 from utils.antispam import AntiSpamNotify
 
@@ -673,6 +674,7 @@ async def get_anime_info(url: str, bot: Bot):
 
         # 3. Эпизоды ("6 / 13", "6 / ?" или просто "14" у вышедшего тайтла)
         info['total_episodes'] = parse_total_episodes(get_value("Эпизоды"))
+        await _remember_title_page(url, soup)
 
         return info
 
@@ -700,6 +702,61 @@ async def get_schedule(bot: Bot):
     if soup is None:
         return None
     return _parse_schedule(soup, _now_utc(), _page_zone(soup))
+
+
+def parse_title_meta(soup) -> dict:
+    """
+    Данные для поиска тайтла на Shikimori со страницы AnimeGO: название, синонимы под ним и из JSON-LD —
+    английское название, тип, дата выхода и число серий. Чего нет на странице — None.
+    """
+    heading = soup.find('h1')
+    title = heading.get_text(" ", strip=True) if heading else None
+    synonyms_block = soup.find(class_='entity__title-synonyms')
+    alt_names = [item.get_text(" ", strip=True) for item in synonyms_block.find_all('li')] if synonyms_block else []
+
+    ld = {}
+    for script in soup.find_all('script', type='application/ld+json'):
+        try:
+            data = json.loads(script.string or script.get_text() or "{}")
+        except ValueError:
+            continue
+        if isinstance(data, dict) and data.get('name'):
+            ld = data
+            break
+
+    english = ld.get('alternateName')
+    if isinstance(english, list):
+        english = next((name for name in english if isinstance(name, str) and name.strip()), None)
+
+    aired_on = None
+    if isinstance(ld.get('datePublished'), str):
+        try:
+            aired_on = datetime.date.fromisoformat(ld['datePublished'][:10])
+        except ValueError:
+            aired_on = None
+
+    kind = None
+    label = soup.find('div', string=lambda t: t and 'Тип' in t, class_='text-body-tertiary')
+    if label and label.find_next_sibling('div'):
+        kind = label.find_next_sibling('div').get_text(strip=True) or None
+
+    episodes = ld.get('numberOfEpisodes')
+    return {
+        'title': title or ld.get('name'),
+        'alt_names': [name for name in alt_names if name and name != title],
+        'english_title': english.strip() if isinstance(english, str) and english.strip() else None,
+        'kind': kind,
+        'aired_on': aired_on,
+        'episodes': episodes if isinstance(episodes, int) and episodes > 0 else None,
+        'poster_url': clean_asset_url(ld.get('image')) if isinstance(ld.get('image'), str) else None,
+    }
+
+
+async def _remember_title_page(url: str, soup) -> None:
+    try:
+        await anime_titles.remember_meta(url, parse_title_meta(soup))
+    except Exception as e:
+        logger.error(f"Failed to remember title page meta {url}: {e}")
 
 
 async def get_anime_details(url: str, bot: Bot):
@@ -745,6 +802,7 @@ async def get_anime_details(url: str, bot: Bot):
 
         info['available_voiceovers'] = voiceovers_list
         await voiceovers.remember(voiceovers_list)
+        await _remember_title_page(url, soup)
 
         return info
 
