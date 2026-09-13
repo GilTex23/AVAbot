@@ -197,6 +197,73 @@ button {
   opacity: 0.75;
 }
 
+.source-switch {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 4px;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  padding: 3px;
+  background: var(--surface);
+}
+
+.source-switch__item {
+  min-height: 34px;
+  border: 0;
+  border-radius: 999px;
+  background: transparent;
+  color: var(--muted);
+  font-size: 14px;
+  font-weight: 700;
+}
+
+.source-switch__item--active {
+  background: rgba(255, 92, 87, 0.16);
+  color: var(--red-hover);
+}
+
+.yummy-search h2 {
+  margin: 0;
+}
+
+.yummy-result {
+  display: grid;
+  grid-template-columns: 44px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 6px 10px 6px 6px;
+  background: var(--surface-soft);
+  color: var(--text);
+  text-align: left;
+}
+
+.yummy-result__poster {
+  width: 44px;
+  height: 62px;
+  border-radius: 5px;
+  overflow: hidden;
+}
+
+.yummy-result__body {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+}
+
+.yummy-result__title {
+  font-size: 14px;
+  font-weight: 700;
+  overflow-wrap: anywhere;
+}
+
+.yummy-result .muted-copy {
+  margin: 0;
+  font-size: 12px;
+}
+
 .voiceover-picker {
   display: grid;
   gap: 10px;

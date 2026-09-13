@@ -9,18 +9,24 @@ export function openAnime(link: string) {
   openTelegramLink(link);
 }
 
-/** Ссылка на тайтл в боте: t.me/бот?start=a3484 (id из конца адреса AnimeGO); null — если поделиться нельзя */
-export function titleDeepLink(link: string) {
-  const id = link.split(/[?#]/)[0].match(/-(\d+)\/?$/)?.[1];
+/**
+ * Ссылка на тайтл в боте: t.me/бот?start=a3484 (id из конца адреса AnimeGO) или ?start=y17212 (id на YummyAnime);
+ * null — если поделиться нельзя
+ */
+export function titleDeepLink(link: string, source?: string | null, sourceId?: string | null) {
   const bot = botUrl.replace(/\/+$/, "");
-  if (!id || bot.includes("YOUR_BOT_USERNAME")) {
+  if (bot.includes("YOUR_BOT_USERNAME")) {
     return null;
   }
-  return `${bot}?start=a${id}`;
+  if (source === "yummy") {
+    return sourceId && /^\d+$/.test(sourceId) ? `${bot}?start=y${sourceId}` : null;
+  }
+  const id = link.includes("animego") ? link.split(/[?#]/)[0].match(/-(\d+)\/?$/)?.[1] : undefined;
+  return id ? `${bot}?start=a${id}` : null;
 }
 
-export function shareTitle(link: string, title: string) {
-  const deepLink = titleDeepLink(link);
+export function shareTitle(link: string, title: string, source?: string | null, sourceId?: string | null) {
+  const deepLink = titleDeepLink(link, source, sourceId);
   if (!deepLink) {
     return;
   }

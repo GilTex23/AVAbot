@@ -17,6 +17,7 @@ USER_COMMANDS = [
     BotCommand(command="updates", description="Свежие серии любимых озвучек"),
     BotCommand(command="schedule", description="Расписание и подписка"),
     BotCommand(command="subs", description="Мои подписки"),
+    BotCommand(command="find", description="Найти тайтл на YummyAnime"),
     BotCommand(command="voiceovers", description="Любимые озвучки"),
     BotCommand(command="app", description="Открыть приложение"),
     BotCommand(command="help", description="Что умеет бот"),
@@ -26,7 +27,10 @@ ADMIN_COMMAND = BotCommand(command="admin", description="Панель админ
 
 def user_commands() -> list[BotCommand]:
     # Без адреса мини-аппа команда /app только сообщает, что приложения нет — в подсказках она не нужна
-    return [command for command in USER_COMMANDS if config.MINIAPP_URL or command.command != "app"]
+    return [
+        command for command in USER_COMMANDS
+        if (config.MINIAPP_URL or command.command != "app") and (config.YUMMY_ENABLED or command.command != "find")
+    ]
 
 
 async def configure_bot(bot: Bot) -> None:

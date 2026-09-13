@@ -12,12 +12,34 @@ export type UserProfile = {
   is_admin?: boolean;
 };
 
+export type SourceId = "animego" | "yummy";
+
 export type UpdateItem = {
   title: string;
   episode: string;
   studio: string;
   link: string;
   poster_url?: string;
+  /** Нет — AnimeGO; yummy — лента YummyAnime, source_id — id тайтла там */
+  source?: SourceId;
+  source_id?: string;
+};
+
+export type YummyTitle = {
+  id: number;
+  title: string;
+  url: string;
+  poster_url?: string | null;
+  kind?: string | null;
+  status?: string | null;
+  year?: number | null;
+  total_episodes?: number | null;
+  episodes_aired?: number | null;
+  next_episode_at?: string | null;
+};
+
+export type YummyTitleDetails = YummyTitle & {
+  voiceovers: Array<{ name: string; last_episode: number; updated_at: string }>;
 };
 
 export type ShikimoriTitleStatus = "pending" | "matched" | "manual" | "not_found" | "ambiguous" | "absent" | "error";
@@ -68,6 +90,7 @@ export type ShikimoriOverview = {
 };
 
 export type UpdatesResponse = {
+  source: SourceId;
   /** favorites — по любимым озвучкам (нет любимых — все), all — все, voiceover — одна озвучка */
   filter: "favorites" | "all" | "voiceover";
   voiceover?: string | null;
@@ -106,6 +129,8 @@ export type SubscriptionItem = {
   link: string;
   poster_url?: string | null;
   voiceover: string;
+  source?: SourceId;
+  source_id?: string | null;
   last_episode?: string | null;
   total_episodes?: number | null;
   next_episode?: NextEpisodeForecast | null;

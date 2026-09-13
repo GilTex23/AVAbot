@@ -28,8 +28,34 @@ def main_menu(has_favorites: bool = False):
     kb.button(text="🎙 Другая озвучка", callback_data="select_other_vo")
     kb.button(text="📅 Расписание (Добавить)", callback_data="open_schedule")
     kb.button(text="📋 Мои подписки", callback_data="my_subs")
+    if config.YUMMY_ENABLED:
+        kb.button(text="🔍 Найти на YummyAnime", callback_data="yummy_find")
     kb.button(text="⚙️ Любимые озвучки", callback_data="settings")
     kb.adjust(1)
+    return kb.as_markup()
+
+
+def yummy_results(results: list[dict]):
+    """Результаты поиска на YummyAnime; в callback_data — id тайтла"""
+    kb = InlineKeyboardBuilder()
+    for index, item in enumerate(results):
+        kb.button(text=f"{index + 1}. {item['title'][:40]}", callback_data=f"yt:{item['id']}")
+    kb.adjust(1)
+    kb.attach(InlineKeyboardBuilder().button(text="🔙 В меню", callback_data="back_home"))
+    return kb.as_markup()
+
+
+def yummy_voiceovers(dubs: list[dict], url: str):
+    """Озвучки тайтла YummyAnime с последней серией; в callback_data — номер в списке из FSM"""
+    kb = InlineKeyboardBuilder()
+    for index, dub in enumerate(dubs):
+        kb.button(text=f"{dub['name']} · {dub['last_episode']}", callback_data=f"ysub:{index}")
+    kb.adjust(2)
+    controls = InlineKeyboardBuilder()
+    controls.button(text="🔗 Открыть на YummyAnime", url=url)
+    controls.button(text="❌ Отмена", callback_data="close_message")
+    controls.adjust(1)
+    kb.attach(controls)
     return kb.as_markup()
 
 

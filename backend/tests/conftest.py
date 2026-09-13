@@ -26,6 +26,9 @@ os.environ.update({
     # Тесты не ходят в настоящий Shikimori: нужные тесты включают его и поднимают локальный сервер
     "SHIKIMORI_ENABLED": "false",
     "SHIKIMORI_URL": "http://127.0.0.1:9",
+    "YUMMY_ENABLED": "false",
+    "YUMMY_API_URL": "http://127.0.0.1:9",
+    "YUMMY_APP_TOKEN": "",
 })
 if str(BACKEND_DIR) not in sys.path:
     sys.path.insert(0, str(BACKEND_DIR))
@@ -63,7 +66,7 @@ def no_stats_writes_without_database(request, monkeypatch):
     async def skip(*args, **kwargs):
         return None
 
-    for name in ("increment_daily_stats", "record_user_activity", "add_key_snapshots", "touch_voiceovers", "upsert_anime_titles"):
+    for name in ("increment_daily_stats", "record_user_activity", "add_key_snapshots", "touch_voiceovers", "upsert_anime_titles", "get_all_voiceover_names", "upsert_yummy_titles"):
         monkeypatch.setattr(db, name, skip)
 
 
@@ -91,7 +94,7 @@ async def database(migrated_database):
     async with db.engine.begin() as conn:
         await conn.execute(text(
             "TRUNCATE episode_releases, episode_airings, scraper_api_key_usage, scraper_key_snapshots, scraper_api_keys, "
-            "daily_stats, user_activity, subscriptions, users, voiceovers, anime_titles RESTART IDENTITY CASCADE"
+            "daily_stats, user_activity, subscriptions, users, voiceovers, anime_titles, shikimori_animes, yummy_titles RESTART IDENTITY CASCADE"
         ))
     await key_pool.reload()
     yield db

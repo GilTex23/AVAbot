@@ -5,6 +5,7 @@ import { Badge } from "../components/ui/badge";
 import { Button } from "../components/ui/button";
 import { Card } from "../components/ui/card";
 import { LazyImage } from "../components/ui/LazyImage";
+import { YummySearch } from "../components/YummySearch";
 import { deleteSubscription, getSubscriptions } from "../services/api";
 import type { SubscriptionItem } from "../lib/types";
 import { hapticNotification } from "../lib/telegram";
@@ -19,6 +20,7 @@ export function Subscriptions({ refreshKey }: SubscriptionsProps) {
   const [loading, setLoading] = useState(true);
   const [pendingDeleteId, setPendingDeleteId] = useState<number | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
+  const [reloadKey, setReloadKey] = useState(0);
 
   useEffect(() => {
     let cancelled = false;
@@ -43,7 +45,7 @@ export function Subscriptions({ refreshKey }: SubscriptionsProps) {
     return () => {
       cancelled = true;
     };
-  }, [refreshKey]);
+  }, [refreshKey, reloadKey]);
 
   async function removeSubscription(id: number) {
     setPendingDeleteId(id);
@@ -70,6 +72,8 @@ export function Subscriptions({ refreshKey }: SubscriptionsProps) {
 
       {notice ? <div className="notice">{notice}</div> : null}
 
+      <YummySearch subscriptions={items} onSubscribed={() => setReloadKey((value) => value + 1)} />
+
       <div className="compact-list">
         {loading ? (
           <Card className="empty-state">
@@ -84,6 +88,7 @@ export function Subscriptions({ refreshKey }: SubscriptionsProps) {
                 <h2>{item.title}</h2>
                 <div className="subscription-row__meta">
                   <Badge tone="red">{item.voiceover}</Badge>
+                  {item.source === "yummy" ? <Badge tone="muted">YummyAnime</Badge> : null}
                   <span>
                     {item.last_episode || "Серия ?"} / {item.total_episodes || "?"}
                   </span>
@@ -91,8 +96,8 @@ export function Subscriptions({ refreshKey }: SubscriptionsProps) {
                 {item.next_episode ? <NextEpisode forecast={item.next_episode} /> : null}
               </div>
               <div className="subscription-row__actions">
-                {titleDeepLink(item.link) ? (
-                  <Button size="icon" variant="ghost" aria-label="Поделиться" onClick={() => shareTitle(item.link, item.title)}>
+                {titleDeepLink(item.link, item.source, item.source_id) ? (
+                  <Button size="icon" variant="ghost" aria-label="Поделиться" onClick={() => shareTitle(item.link, item.title, item.source, item.source_id)}>
                     <Share2 size={18} />
                   </Button>
                 ) : null}
@@ -108,7 +113,7 @@ export function Subscriptions({ refreshKey }: SubscriptionsProps) {
         )}
       </div>
 
-      {!loading && items.length === 0 ? <Card className="empty-state">Подписок пока нет. Добавьте тайтл из обновлений или расписания.</Card> : null}
+      {!loading && items.length === 0 ? <Card className="empty-state">Подписок пока нет. Добавьте тайтл из обновлений, расписания или найдите на YummyAnime.</Card> : null}
     </div>
   );
 }

@@ -12,7 +12,7 @@ from fastapi import APIRouter, Depends, HTTPException, Request, status
 import config
 from database import requests as db
 from loader import bot
-from services import anime_titles, forecast, parser, shikimori_sync, stats, voiceovers
+from services import anime_titles, forecast, parser, shikimori_sync, stats, voiceovers, yummy, yummy_sync
 from services.subscription_rules import subscription_block_reason
 
 logger = logging.getLogger(__name__)
@@ -87,6 +87,8 @@ def _serialize_subscription(sub, next_episode: dict | None = None) -> dict:
         "link": sub.anime_url,
         "poster_url": sub.poster_url,
         "voiceover": sub.voiceover,
+        "source": sub.source,
+        "source_id": sub.source_id,
         "last_episode": sub.last_episode,
         "total_episodes": sub.total_episodes,
         "next_episode": next_episode,
@@ -113,18 +115,31 @@ async def get_me(current_user: dict = Depends(get_miniapp_user)):
     }
 
 
+def _require_yummy():
+    if not config.YUMMY_ENABLED:
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="YummyAnime отключён")
+
+
 @router.get("/updates")
-async def get_updates(voiceover: str | None = None, current_user: dict = Depends(get_miniapp_user)):
+async def get_updates(voiceover: str | None = None, source: str = "animego", current_user: dict = Depends(get_miniapp_user)):
     """
     Свежие серии. Без voiceover — по любимым озвучкам пользователя (нет любимых — все),
     voiceover=«Все» — все серии, иначе — одна озвучка. studios — озвучки, которые сейчас есть в ленте.
+    source=yummy — лента YummyAnime вместо AnimeGO.
     """
     user = await sync_miniapp_user(current_user)
     favorites = list(user.favorite_voiceovers or [])
 
-    updates = await parser.get_updates(bot)
-    if updates is None:
-        raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail="AnimeGO is temporarily unavailable")
+    if source == yummy_sync.SOURCE:
+        _require_yummy()
+        try:
+            updates = await yummy_sync.latest_updates()
+        except yummy.YummyError:
+            raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail="YummyAnime временно недоступен")
+    else:
+        updates = await parser.get_updates(bot)
+        if updates is None:
+            raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail="AnimeGO is temporarily unavailable")
 
     voiceover = (voiceover or "").strip()
     if not voiceover:
@@ -135,6 +150,7 @@ async def get_updates(voiceover: str | None = None, current_user: dict = Depends
         mode, names = "voiceover", [voiceover]
 
     return {
+        "source": yummy_sync.SOURCE if source == yummy_sync.SOURCE else "animego",
         "filter": mode,
         "voiceover": voiceover or None,
         "favorites": favorites,
@@ -184,9 +200,81 @@ async def get_my_week(current_user: dict = Depends(get_miniapp_user)):
     }
 
 
+def _serialize_yummy_title(details: dict) -> dict:
+    return {
+        "id": details["id"],
+        "title": details["title"],
+        "url": details["url"],
+        "poster_url": details["poster_url"],
+        "kind": details["kind"],
+        "status": details["status"],
+        "year": details["year"],
+        "total_episodes": details["episodes_count"] or None,
+        "episodes_aired": details["episodes_aired"],
+        "next_episode_at": details["next_episode_at"].isoformat() + "Z" if details.get("next_episode_at") else None,
+    }
+
+
+@router.get("/yummy/search")
+async def search_yummy(q: str, current_user: dict = Depends(get_miniapp_user)):
+    """Поиск тайтлов на YummyAnime"""
+    await sync_miniapp_user(current_user)
+    _require_yummy()
+    query = q.strip()
+    if len(query) < 2:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Введите хотя бы 2 символа")
+    try:
+        rows = await yummy_sync.search(query[:100])
+    except yummy.YummyError:
+        raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail="YummyAnime временно недоступен")
+    return {"items": [_serialize_yummy_title(row) for row in rows]}
+
+
+@router.get("/yummy/anime/{anime_id}")
+async def get_yummy_anime(anime_id: int, current_user: dict = Depends(get_miniapp_user)):
+    """Тайтл YummyAnime и его озвучки с последней вышедшей серией"""
+    await sync_miniapp_user(current_user)
+    _require_yummy()
+    try:
+        details = await yummy_sync.title_details(anime_id)
+    except yummy.YummyNotFound:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Тайтл не найден на YummyAnime")
+    except yummy.YummyError:
+        raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail="YummyAnime временно недоступен")
+    return {
+        **_serialize_yummy_title(details),
+        "voiceovers": [
+            {"name": dub["name"], "last_episode": dub["last_episode"], "updated_at": dub["updated_at"].isoformat() + "Z"}
+            for dub in details["voiceovers"]
+        ],
+    }
+
+
+async def _add_yummy_subscription(payload: dict, tg_id: int) -> dict:
+    _require_yummy()
+    source_id = str(payload.get("source_id") or "").strip()
+    voiceover = (payload.get("voiceover") or "").strip()
+    if not source_id.isdigit() or not voiceover:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="source_id and voiceover are required")
+    try:
+        created, _, _ = await yummy_sync.subscribe(tg_id, int(source_id), voiceover)
+    except ValueError as e:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
+    except yummy.YummyNotFound:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Тайтл не найден на YummyAnime")
+    except yummy.YummyError:
+        raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail="YummyAnime временно недоступен")
+    if created:
+        await stats.increment("subscriptions.created", stats.SOURCE_MINIAPP)
+    return {"ok": True, "created": created}
+
+
 @router.post("/subscriptions")
 async def add_subscription(payload: dict, current_user: dict = Depends(get_miniapp_user)):
     await sync_miniapp_user(current_user)
+    if payload.get("source") == yummy_sync.SOURCE:
+        # Название, ссылку и последнюю серию берём у YummyAnime, а не из запроса
+        return await _add_yummy_subscription(payload, int(current_user["id"]))
     title = (payload.get("title") or "").strip()
     link = (payload.get("link") or "").strip()
     episode = (payload.get("episode") or "Серия 0").strip()

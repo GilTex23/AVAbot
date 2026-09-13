@@ -28,7 +28,7 @@ from middlewares.callback import CallbackAnswerMiddleware
 from services.logger import setup_logger
 from services.checker import check_updates, check_subscriptions_status
 from services.notifier import notify_admins
-from services import bot_setup, scraper_keys, shikimori_sync, stats
+from services import bot_setup, scraper_keys, shikimori_sync, stats, yummy_sync
 from database.requests import init_db, engine
 
 from services.admin_panel import authentication_backend, UserAdmin, SubscriptionAdmin
@@ -72,6 +72,9 @@ async def lifespan(app: FastAPI):
     await bot_setup.configure_bot(bot)
 
     scheduler.add_job(check_updates, "interval", minutes=15, args=[bot], id="updates_checker", replace_existing=True)
+    # Новые серии по подпискам на YummyAnime — отдельно от AnimeGO, со своим API
+    scheduler.add_job(yummy_sync.check_updates, "interval", minutes=15, args=[bot], id="yummy_checker", replace_existing=True,
+                      next_run_time=datetime.now() + timedelta(minutes=1))
     scheduler.add_job(check_subscriptions_status, "cron", hour=21, minute=0, args=[bot], id="subscriptions_status_checker", replace_existing=True)
     # /account не тратит кредиты; первый опрос сразу после старта
     scheduler.add_job(scraper_keys.refresh_all_keys, "interval", hours=6, args=[bot], id="scraper_keys_refresh", replace_existing=True, next_run_time=datetime.now())

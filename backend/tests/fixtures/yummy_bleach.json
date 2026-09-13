@@ -1,0 +1,872 @@
+{
+ "anime": {
+  "anime_id": 17212,
+  "anime_url": "blich-tysyacheletnyaya-krovavaya-voyna-bedstvie",
+  "title": "Блич: Тысячелетняя кровавая война — Бедствие",
+  "poster": {
+   "fullsize": "//static.yani.tv/posters/full/1636954338.jpg",
+   "big": "//static.yani.tv/posters/big/1636954338.webp",
+   "small": "//static.yani.tv/posters/small/1636954338.webp",
+   "medium": "//static.yani.tv/posters/medium/1636954338.webp",
+   "huge": "//static.yani.tv/posters/huge/1636954338.avif",
+   "mega": "//static.yani.tv/posters/mega/1636954338.avif"
+  },
+  "year": 2026,
+  "anime_status": {
+   "value": 1,
+   "title": "онгоинг",
+   "alias": "ongoing",
+   "class": "review"
+  },
+  "type": {
+   "name": "Сериал",
+   "value": 1,
+   "shortname": "ТВ",
+   "alias": "tv"
+  },
+  "remote_ids": {
+   "worldart_id": 12335,
+   "shikimori_id": 60636,
+   "anidub_id": 0,
+   "anilibria_alias": "",
+   "myanimelist_id": 60636,
+   "kp_id": 4789626,
+   "worldart_type": "animation",
+   "sr_id": 0
+  },
+  "episodes": {
+   "count": 10,
+   "aired": 8,
+   "next_date": 1789826400,
+   "prev_date": 1789221600
+  },
+  "other_titles": [
+   "BLEACH 千年血戦篇-禍進譚-",
+   "Bleach: Sennen Kessen-hen - Kashin-tan",
+   "Bleach: Thousand-Year Blood War - The Calamity",
+   "Бліч: Тисячолітня кривава війна — Лихо"
+  ]
+ },
+ "videos": [
+  {
+   "video_id": 1027013,
+   "data": {
+    "player": "Плеер Kodik",
+    "dubbing": "Озвучка AniStar",
+    "player_id": 4
+   },
+   "number": "1",
+   "date": 1782747570
+  },
+  {
+   "video_id": 1027107,
+   "data": {
+    "player": "Плеер Kodik",
+    "dubbing": "Озвучка AniStar",
+    "player_id": 4
+   },
+   "number": "2",
+   "date": 1782776653
+  },
+  {
+   "video_id": 1027108,
+   "data": {
+    "player": "Плеер Kodik",
+    "dubbing": "Озвучка AniStar",
+    "player_id": 4
+   },
+   "number": "3",
+   "date": 1782776653
+  },
+  {
+   "video_id": 1043427,
+   "data": {
+    "player": "Плеер Kodik",
+    "dubbing": "Озвучка AniStar",
+    "player_id": 4
+   },
+   "number": "4",
+   "date": 1786819289
+  },
+  {
+   "video_id": 1065293,
+   "data": {
+    "player": "Плеер Kodik",
+    "dubbing": "Озвучка AniStar",
+    "player_id": 4
+   },
+   "number": "5",
+   "date": 1787420002
+  },
+  {
+   "video_id": 1250349,
+   "data": {
+    "player": "Плеер Kodik",
+    "dubbing": "Озвучка AniStar",
+    "player_id": 4
+   },
+   "number": "6",
+   "date": 1788039134
+  },
+  {
+   "video_id": 1307658,
+   "data": {
+    "player": "Плеер Kodik",
+    "dubbing": "Озвучка AniStar",
+    "player_id": 4
+   },
+   "number": "7",
+   "date": 1788630985
+  },
+  {
+   "video_id": 1323078,
+   "data": {
+    "player": "Плеер Kodik",
+    "dubbing": "Озвучка AniStar",
+    "player_id": 4
+   },
+   "number": "8",
+   "date": 1789239542
+  },
+  {
+   "video_id": 1036846,
+   "data": {
+    "player": "Плеер CVH",
+    "dubbing": "Озвучка AniStar",
+    "player_id": 3
+   },
+   "number": "1",
+   "date": 1785970247
+  },
+  {
+   "video_id": 1036851,
+   "data": {
+    "player": "Плеер CVH",
+    "dubbing": "Озвучка AniStar",
+    "player_id": 3
+   },
+   "number": "2",
+   "date": 1785970247
+  },
+  {
+   "video_id": 1036857,
+   "data": {
+    "player": "Плеер CVH",
+    "dubbing": "Озвучка AniStar",
+    "player_id": 3
+   },
+   "number": "3",
+   "date": 1785970247
+  },
+  {
+   "video_id": 1307710,
+   "data": {
+    "player": "Плеер CVH",
+    "dubbing": "Озвучка AniStar",
+    "player_id": 3
+   },
+   "number": "4",
+   "date": 1788637324
+  },
+  {
+   "video_id": 1307711,
+   "data": {
+    "player": "Плеер CVH",
+    "dubbing": "Озвучка AniStar",
+    "player_id": 3
+   },
+   "number": "5",
+   "date": 1788637324
+  },
+  {
+   "video_id": 1307712,
+   "data": {
+    "player": "Плеер CVH",
+    "dubbing": "Озвучка AniStar",
+    "player_id": 3
+   },
+   "number": "6",
+   "date": 1788637324
+  },
+  {
+   "video_id": 1307713,
+   "data": {
+    "player": "Плеер CVH",
+    "dubbing": "Озвучка AniStar",
+    "player_id": 3
+   },
+   "number": "7",
+   "date": 1788637324
+  },
+  {
+   "video_id": 1323505,
+   "data": {
+    "player": "Плеер CVH",
+    "dubbing": "Озвучка AniStar",
+    "player_id": 3
+   },
+   "number": "8",
+   "date": 1789322778
+  },
+  {
+   "video_id": 1033150,
+   "data": {
+    "player": "Плеер Kodik",
+    "dubbing": "Субтитры SubVost",
+    "player_id": 4
+   },
+   "number": "1",
+   "date": 1785012585
+  },
+  {
+   "video_id": 1034789,
+   "data": {
+    "player": "Плеер Kodik",
+    "dubbing": "Субтитры SubVost",
+    "player_id": 4
+   },
+   "number": "2",
+   "date": 1785623180
+  },
+  {
+   "video_id": 1041574,
+   "data": {
+    "player": "Плеер Kodik",
+    "dubbing": "Субтитры SubVost",
+    "player_id": 4
+   },
+   "number": "3",
+   "date": 1786280919
+  },
+  {
+   "video_id": 1043443,
+   "data": {
+    "player": "Плеер Kodik",
+    "dubbing": "Субтитры SubVost",
+    "player_id": 4
+   },
+   "number": "4",
+   "date": 1786821176
+  },
+  {
+   "video_id": 1065376,
+   "data": {
+    "player": "Плеер Kodik",
+    "dubbing": "Субтитры SubVost",
+    "player_id": 4
+   },
+   "number": "5",
+   "date": 1787429646
+  },
+  {
+   "video_id": 1250325,
+   "data": {
+    "player": "Плеер Kodik",
+    "dubbing": "Субтитры SubVost",
+    "player_id": 4
+   },
+   "number": "6",
+   "date": 1788037292
+  },
+  {
+   "video_id": 1307754,
+   "data": {
+    "player": "Плеер Kodik",
+    "dubbing": "Субтитры SubVost",
+    "player_id": 4
+   },
+   "number": "7",
+   "date": 1788649372
+  },
+  {
+   "video_id": 1323062,
+   "data": {
+    "player": "Плеер Kodik",
+    "dubbing": "Субтитры SubVost",
+    "player_id": 4
+   },
+   "number": "8",
+   "date": 1789235860
+  },
+  {
+   "video_id": 1312656,
+   "data": {
+    "player": "Плеер CVH",
+    "dubbing": "Субтитры SubVost",
+    "player_id": 3
+   },
+   "number": "1",
+   "date": 1789141857
+  },
+  {
+   "video_id": 1312664,
+   "data": {
+    "player": "Плеер CVH",
+    "dubbing": "Субтитры SubVost",
+    "player_id": 3
+   },
+   "number": "2",
+   "date": 1789141857
+  },
+  {
+   "video_id": 1312673,
+   "data": {
+    "player": "Плеер CVH",
+    "dubbing": "Субтитры SubVost",
+    "player_id": 3
+   },
+   "number": "3",
+   "date": 1789141857
+  },
+  {
+   "video_id": 1312682,
+   "data": {
+    "player": "Плеер CVH",
+    "dubbing": "Субтитры SubVost",
+    "player_id": 3
+   },
+   "number": "4",
+   "date": 1789141857
+  },
+  {
+   "video_id": 1312691,
+   "data": {
+    "player": "Плеер CVH",
+    "dubbing": "Субтитры SubVost",
+    "player_id": 3
+   },
+   "number": "5",
+   "date": 1789141857
+  },
+  {
+   "video_id": 1312700,
+   "data": {
+    "player": "Плеер CVH",
+    "dubbing": "Субтитры SubVost",
+    "player_id": 3
+   },
+   "number": "6",
+   "date": 1789141857
+  },
+  {
+   "video_id": 1312708,
+   "data": {
+    "player": "Плеер CVH",
+    "dubbing": "Субтитры SubVost",
+    "player_id": 3
+   },
+   "number": "7",
+   "date": 1789141857
+  },
+  {
+   "video_id": 1323082,
+   "data": {
+    "player": "Плеер CVH",
+    "dubbing": "Субтитры SubVost",
+    "player_id": 3
+   },
+   "number": "8",
+   "date": 1789240845
+  },
+  {
+   "video_id": 1027109,
+   "data": {
+    "player": "Плеер Kodik",
+    "dubbing": "Озвучка AniDUB",
+    "player_id": 4
+   },
+   "number": "1",
+   "date": 1782776653
+  },
+  {
+   "video_id": 1027110,
+   "data": {
+    "player": "Плеер Kodik",
+    "dubbing": "Озвучка AniDUB",
+    "player_id": 4
+   },
+   "number": "2",
+   "date": 1782776653
+  },
+  {
+   "video_id": 1027111,
+   "data": {
+    "player": "Плеер Kodik",
+    "dubbing": "Озвучка AniDUB",
+    "player_id": 4
+   },
+   "number": "3",
+   "date": 1782776653
+  },
+  {
+   "video_id": 1052417,
+   "data": {
+    "player": "Плеер Kodik",
+    "dubbing": "Озвучка AniDUB",
+    "player_id": 4
+   },
+   "number": "4",
+   "date": 1787068934
+  },
+  {
+   "video_id": 1065505,
+   "data": {
+    "player": "Плеер Kodik",
+    "dubbing": "Озвучка AniDUB",
+    "player_id": 4
+   },
+   "number": "5",
+   "date": 1787480612
+  },
+  {
+   "video_id": 1260454,
+   "data": {
+    "player": "Плеер Kodik",
+    "dubbing": "Озвучка AniDUB",
+    "player_id": 4
+   },
+   "number": "6",
+   "date": 1788161476
+  },
+  {
+   "video_id": 1308143,
+   "data": {
+    "player": "Плеер Kodik",
+    "dubbing": "Озвучка AniDUB",
+    "player_id": 4
+   },
+   "number": "7",
+   "date": 1788770335
+  },
+  {
+   "video_id": 1034040,
+   "data": {
+    "player": "Плеер Kodik",
+    "dubbing": "Озвучка Red Head Sound",
+    "player_id": 4
+   },
+   "number": "1",
+   "date": 1785334291
+  },
+  {
+   "video_id": 1035095,
+   "data": {
+    "player": "Плеер Kodik",
+    "dubbing": "Озвучка Red Head Sound",
+    "player_id": 4
+   },
+   "number": "2",
+   "date": 1785744561
+  },
+  {
+   "video_id": 1041858,
+   "data": {
+    "player": "Плеер Kodik",
+    "dubbing": "Озвучка Red Head Sound",
+    "player_id": 4
+   },
+   "number": "3",
+   "date": 1786377555
+  },
+  {
+   "video_id": 1052421,
+   "data": {
+    "player": "Плеер Kodik",
+    "dubbing": "Озвучка Red Head Sound",
+    "player_id": 4
+   },
+   "number": "4",
+   "date": 1787068934
+  },
+  {
+   "video_id": 1072812,
+   "data": {
+    "player": "Плеер Kodik",
+    "dubbing": "Озвучка Red Head Sound",
+    "player_id": 4
+   },
+   "number": "5",
+   "date": 1787525087
+  },
+  {
+   "video_id": 1260565,
+   "data": {
+    "player": "Плеер Kodik",
+    "dubbing": "Озвучка Red Head Sound",
+    "player_id": 4
+   },
+   "number": "6",
+   "date": 1788183725
+  },
+  {
+   "video_id": 1308102,
+   "data": {
+    "player": "Плеер Kodik",
+    "dubbing": "Озвучка Red Head Sound",
+    "player_id": 4
+   },
+   "number": "7",
+   "date": 1788729897
+  },
+  {
+   "video_id": 1308372,
+   "data": {
+    "player": "Плеер CVH",
+    "dubbing": "Озвучка RedHeadSound",
+    "player_id": 3
+   },
+   "number": "1",
+   "date": 1788803877
+  },
+  {
+   "video_id": 1308374,
+   "data": {
+    "player": "Плеер CVH",
+    "dubbing": "Озвучка RedHeadSound",
+    "player_id": 3
+   },
+   "number": "2",
+   "date": 1788803877
+  },
+  {
+   "video_id": 1308376,
+   "data": {
+    "player": "Плеер CVH",
+    "dubbing": "Озвучка RedHeadSound",
+    "player_id": 3
+   },
+   "number": "3",
+   "date": 1788803877
+  },
+  {
+   "video_id": 1308378,
+   "data": {
+    "player": "Плеер CVH",
+    "dubbing": "Озвучка RedHeadSound",
+    "player_id": 3
+   },
+   "number": "4",
+   "date": 1788803877
+  },
+  {
+   "video_id": 1308380,
+   "data": {
+    "player": "Плеер CVH",
+    "dubbing": "Озвучка RedHeadSound",
+    "player_id": 3
+   },
+   "number": "5",
+   "date": 1788803877
+  },
+  {
+   "video_id": 1308382,
+   "data": {
+    "player": "Плеер CVH",
+    "dubbing": "Озвучка RedHeadSound",
+    "player_id": 3
+   },
+   "number": "6",
+   "date": 1788803877
+  },
+  {
+   "video_id": 1308383,
+   "data": {
+    "player": "Плеер CVH",
+    "dubbing": "Озвучка RedHeadSound",
+    "player_id": 3
+   },
+   "number": "7",
+   "date": 1788803877
+  },
+  {
+   "video_id": 1312651,
+   "data": {
+    "player": "Плеер CVH",
+    "dubbing": "Озвучка Дубляж AniDUB",
+    "player_id": 3
+   },
+   "number": "1",
+   "date": 1789141857
+  },
+  {
+   "video_id": 1312659,
+   "data": {
+    "player": "Плеер CVH",
+    "dubbing": "Озвучка Дубляж AniDUB",
+    "player_id": 3
+   },
+   "number": "2",
+   "date": 1789141857
+  },
+  {
+   "video_id": 1312668,
+   "data": {
+    "player": "Плеер CVH",
+    "dubbing": "Озвучка Дубляж AniDUB",
+    "player_id": 3
+   },
+   "number": "3",
+   "date": 1789141857
+  },
+  {
+   "video_id": 1312677,
+   "data": {
+    "player": "Плеер CVH",
+    "dubbing": "Озвучка Дубляж AniDUB",
+    "player_id": 3
+   },
+   "number": "4",
+   "date": 1789141857
+  },
+  {
+   "video_id": 1312686,
+   "data": {
+    "player": "Плеер CVH",
+    "dubbing": "Озвучка Дубляж AniDUB",
+    "player_id": 3
+   },
+   "number": "5",
+   "date": 1789141857
+  },
+  {
+   "video_id": 1312695,
+   "data": {
+    "player": "Плеер CVH",
+    "dubbing": "Озвучка Дубляж AniDUB",
+    "player_id": 3
+   },
+   "number": "6",
+   "date": 1789141857
+  },
+  {
+   "video_id": 1312705,
+   "data": {
+    "player": "Плеер CVH",
+    "dubbing": "Озвучка Дубляж AniDUB",
+    "player_id": 3
+   },
+   "number": "7",
+   "date": 1789141857
+  }
+ ],
+ "feed_new_videos": [
+  {
+   "ep_title": "8",
+   "anime_id": 21452,
+   "anime_url": "katainaka-no-ossan-kensei-ni-naru-2nd-season",
+   "title": "Старик из деревни становится Святым мечом 2",
+   "poster": {
+    "fullsize": "//static.yani.tv/posters/full/1636945845.jpg",
+    "big": "//static.yani.tv/posters/big/1636945845.webp",
+    "small": "//static.yani.tv/posters/small/1636945845.webp",
+    "medium": "//static.yani.tv/posters/medium/1636945845.webp",
+    "huge": "//static.yani.tv/posters/huge/1636945845.avif",
+    "mega": "//static.yani.tv/posters/mega/1636945845.avif"
+   },
+   "date": 1789340824,
+   "dub_title": "Озвучка AniDUB Online",
+   "player_title": "Плеер CVH",
+   "video_id": 1323598
+  },
+  {
+   "ep_title": "12",
+   "anime_id": 16246,
+   "anime_url": "dobro-pozhalovat-v-ad-iruma-4",
+   "title": "Добро пожаловать в ад, Ирума-кун! 4",
+   "poster": {
+    "fullsize": "//static.yani.tv/posters/full/1636922958.jpg",
+    "big": "//static.yani.tv/posters/big/1636922958.webp",
+    "small": "//static.yani.tv/posters/small/1636922958.webp",
+    "medium": "//static.yani.tv/posters/medium/1636922958.webp",
+    "huge": "//static.yani.tv/posters/huge/1636922958.avif",
+    "mega": "//static.yani.tv/posters/mega/1636922958.avif"
+   },
+   "date": 1789339823,
+   "dub_title": "Озвучка AniDUB Online",
+   "player_title": "Плеер CVH",
+   "video_id": 1323597
+  },
+  {
+   "ep_title": "11",
+   "anime_id": 29524,
+   "anime_url": "za-spinoy-kamui",
+   "title": "За спиной Камуи",
+   "poster": {
+    "fullsize": "//static.yani.tv/posters/full/1636959825.jpg",
+    "big": "//static.yani.tv/posters/big/1636959825.webp",
+    "small": "//static.yani.tv/posters/small/1636959825.webp",
+    "medium": "//static.yani.tv/posters/medium/1636959825.webp",
+    "huge": "//static.yani.tv/posters/huge/1636959825.avif",
+    "mega": "//static.yani.tv/posters/mega/1636959825.avif"
+   },
+   "date": 1789338733,
+   "dub_title": "Озвучка AniLibria",
+   "player_title": "Плеер Kodik",
+   "video_id": 1323596
+  },
+  {
+   "ep_title": "11",
+   "anime_id": 20508,
+   "anime_url": "zeri-feisheng",
+   "title": "День моего вознесения",
+   "poster": {
+    "fullsize": "//static.yani.tv/posters/full/1636823763.jpg",
+    "big": "//static.yani.tv/posters/big/1636823763.webp",
+    "small": "//static.yani.tv/posters/small/1636823763.webp",
+    "medium": "//static.yani.tv/posters/medium/1636823763.webp",
+    "huge": "//static.yani.tv/posters/huge/1636823763.avif",
+    "mega": "//static.yani.tv/posters/mega/1636823763.avif"
+   },
+   "date": 1789335978,
+   "dub_title": "Озвучка MDA",
+   "player_title": "Плеер Kodik",
+   "video_id": 1323595
+  },
+  {
+   "ep_title": "11",
+   "anime_id": 22933,
+   "anime_url": "grow-up-show-himawari-no-circus-dan",
+   "title": "Шоу для взрослых: Цирк «Подсолнух»",
+   "poster": {
+    "fullsize": "//static.yani.tv/posters/full/1636938936.jpg",
+    "big": "//static.yani.tv/posters/big/1636938936.webp",
+    "small": "//static.yani.tv/posters/small/1636938936.webp",
+    "medium": "//static.yani.tv/posters/medium/1636938936.webp",
+    "huge": "//static.yani.tv/posters/huge/1636938936.avif",
+    "mega": "//static.yani.tv/posters/mega/1636938936.avif"
+   },
+   "date": 1789335063,
+   "dub_title": "Озвучка SHIZA Project",
+   "player_title": "Плеер Kodik",
+   "video_id": 1323594
+  },
+  {
+   "ep_title": "22",
+   "anime_id": 21798,
+   "anime_url": "cugai-zagrobnogo-mira",
+   "title": "Цугаи загробного мира",
+   "poster": {
+    "fullsize": "//static.yani.tv/posters/full/1636936389.jpg",
+    "big": "//static.yani.tv/posters/big/1636936389.webp",
+    "small": "//static.yani.tv/posters/small/1636936389.webp",
+    "medium": "//static.yani.tv/posters/medium/1636936389.webp",
+    "huge": "//static.yani.tv/posters/huge/1636936389.avif",
+    "mega": "//static.yani.tv/posters/mega/1636936389.avif"
+   },
+   "date": 1789335061,
+   "dub_title": "Озвучка Творческая студия МИР",
+   "player_title": "Плеер Kodik",
+   "video_id": 1323593
+  }
+ ],
+ "search": [
+  {
+   "anime_id": 17212,
+   "anime_url": "blich-tysyacheletnyaya-krovavaya-voyna-bedstvie",
+   "title": "Блич: Тысячелетняя кровавая война — Бедствие",
+   "poster": {
+    "fullsize": "//static.yani.tv/posters/full/1636954338.jpg",
+    "big": "//static.yani.tv/posters/big/1636954338.webp",
+    "small": "//static.yani.tv/posters/small/1636954338.webp",
+    "medium": "//static.yani.tv/posters/medium/1636954338.webp",
+    "huge": "//static.yani.tv/posters/huge/1636954338.avif",
+    "mega": "//static.yani.tv/posters/mega/1636954338.avif"
+   },
+   "year": 2026,
+   "anime_status": {
+    "value": 1,
+    "title": "онгоинг",
+    "alias": "ongoing",
+    "class": "review"
+   },
+   "type": {
+    "name": "Сериал",
+    "value": 1,
+    "shortname": "ТВ",
+    "alias": "tv"
+   },
+   "remote_ids": {
+    "worldart_id": 12335,
+    "shikimori_id": 60636,
+    "anidub_id": 0,
+    "anilibria_alias": "",
+    "myanimelist_id": 60636,
+    "kp_id": 4789626,
+    "worldart_type": "animation",
+    "sr_id": 0
+   }
+  },
+  {
+   "anime_id": 176,
+   "anime_url": "chernyj-klever-dzhamp-festa-2018",
+   "title": "Чёрный клевер: Джамп Феста",
+   "poster": {
+    "fullsize": "//static.yani.tv/posters/full/1545245716.jpg",
+    "big": "//static.yani.tv/posters/big/1545245716.webp",
+    "small": "//static.yani.tv/posters/small/1545245716.webp",
+    "medium": "//static.yani.tv/posters/medium/1545245716.webp",
+    "huge": "//static.yani.tv/posters/huge/1545245716.avif",
+    "mega": "//static.yani.tv/posters/mega/1545245716.avif"
+   },
+   "year": 2018,
+   "anime_status": {
+    "value": 0,
+    "title": "вышел",
+    "alias": "released",
+    "class": ""
+   },
+   "type": {
+    "name": "Спешл",
+    "value": 5,
+    "shortname": "спешл",
+    "alias": "special"
+   },
+   "remote_ids": {
+    "worldart_id": 0,
+    "shikimori_id": 38768,
+    "anidub_id": 0,
+    "anilibria_alias": "",
+    "myanimelist_id": 38768,
+    "kp_id": 0,
+    "worldart_type": "animation",
+    "sr_id": 677
+   }
+  },
+  {
+   "anime_id": 90,
+   "anime_url": "blich",
+   "title": "Блич",
+   "poster": {
+    "fullsize": "//static.yani.tv/posters/full/1636670798.jpg",
+    "big": "//static.yani.tv/posters/big/1636670798.webp",
+    "small": "//static.yani.tv/posters/small/1636670798.webp",
+    "medium": "//static.yani.tv/posters/medium/1636670798.webp",
+    "huge": "//static.yani.tv/posters/huge/1636670798.avif",
+    "mega": "//static.yani.tv/posters/mega/1636670798.avif"
+   },
+   "year": 2004,
+   "anime_status": {
+    "value": 0,
+    "title": "вышел",
+    "alias": "released",
+    "class": ""
+   },
+   "type": {
+    "name": "Сериал",
+    "value": 1,
+    "shortname": "ТВ",
+    "alias": "tv"
+   },
+   "remote_ids": {
+    "worldart_id": 2656,
+    "shikimori_id": 269,
+    "anidub_id": 0,
+    "anilibria_alias": "bleach",
+    "myanimelist_id": 269,
+    "kp_id": 258621,
+    "worldart_type": "animation",
+    "sr_id": 1092
+   }
+  }
+ ]
+}

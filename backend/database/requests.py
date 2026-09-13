@@ -3,7 +3,7 @@ from sqlalchemy import select, update, delete, and_, case, func, text
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.orm import joinedload
 from database.models import (
-    Base, User, Subscription, AnimeTitle, ShikimoriAnime, Voiceover, ScraperApiKey, ScraperApiKeyUsage, EpisodeRelease, EpisodeAiring,
+    Base, User, Subscription, AnimeTitle, ShikimoriAnime, Voiceover, YummyTitle, ScraperApiKey, ScraperApiKeyUsage, EpisodeRelease, EpisodeAiring,
     DailyStat, UserActivity, ScraperKeySnapshot,
 )
 import datetime
@@ -229,6 +229,30 @@ async def get_max_released_episodes(urls: set[str]) -> dict[str, int]:
         return dict(result.all())
 
 
+# --- YUMMYANIME ---
+async def upsert_yummy_titles(rows: list[dict]):
+    rows = list({row["id"]: row for row in rows}.values())
+    if not rows:
+        return
+    now = datetime.datetime.utcnow()
+    async with async_session() as session:
+        stmt = pg_insert(YummyTitle).values([{**row, "synced_at": now} for row in rows])
+        stmt = stmt.on_conflict_do_update(
+            index_elements=[YummyTitle.id],
+            set_={column: stmt.excluded[column] for column in rows[0] if column != "id"} | {"synced_at": stmt.excluded.synced_at},
+        )
+        await session.execute(stmt)
+        await session.commit()
+
+
+async def get_yummy_titles(ids: set[int]) -> dict:
+    if not ids:
+        return {}
+    async with async_session() as session:
+        result = await session.scalars(select(YummyTitle).where(YummyTitle.id.in_(ids)))
+        return {title.id: title for title in result.all()}
+
+
 # --- VOICEOVERS ---
 async def touch_voiceovers(names: list[str], seen_at: datetime.datetime | None = None):
     """Добавляет новые озвучки в справочник и обновляет время, когда озвучку видели последний раз"""
@@ -274,6 +298,11 @@ async def get_voiceover_catalog(releases_since: datetime.datetime):
         ]
 
 
+async def get_all_voiceover_names() -> list[str]:
+    async with async_session() as session:
+        return list(await session.scalars(select(Voiceover.name)))
+
+
 async def get_voiceover_names(names: list[str]) -> set[str]:
     """Какие из названий есть в справочнике"""
     if not names:
@@ -291,6 +320,8 @@ async def add_subscription(
     voiceover: str,
     total_eps: int = None,
     poster_url: str | None = None,
+    source: str = "animego",
+    source_id: str | None = None,
 ):
     """Добавляет подписку с конкретной озвучкой"""
     async with async_session() as session:
@@ -315,7 +346,9 @@ async def add_subscription(
             poster_url=poster_url,
             last_episode=last_ep,
             voiceover=voiceover,
-            total_episodes=total_eps
+            total_episodes=total_eps,
+            source=source,
+            source_id=source_id,
         ))
         await session.commit()
         return True

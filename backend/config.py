@@ -38,6 +38,13 @@ try:
     # Shikimori просит указывать в User-Agent название приложения
     SHIKIMORI_USER_AGENT = os.getenv("SHIKIMORI_USER_AGENT", "AnimeVoiceNotifier")
 
+    # YummyAnime: второй источник серий в озвучке (свой API, без ScraperAPI)
+    YUMMY_ENABLED = os.getenv("YUMMY_ENABLED", "true").lower() in ("1", "true", "yes", "on")
+    YUMMY_API_URL = os.getenv("YUMMY_API_URL", "https://api.yani.tv").rstrip("/")
+    YUMMY_SITE_URL = os.getenv("YUMMY_SITE_URL", "https://yummyani.me").rstrip("/")
+    # Публичный токен приложения (yummyani.me/dev/applications); API просит передавать его в X-Application
+    YUMMY_APP_TOKEN = os.getenv("YUMMY_APP_TOKEN", "").strip()
+
     # Шифрует ключи ScraperAPI в БД. Если его поменять, сохранённые ключи перестанут расшифровываться
     SCRAPER_KEYS_SECRET = os.getenv("SCRAPER_KEYS_SECRET", "")
     if not SCRAPER_KEYS_SECRET:

@@ -8,9 +8,9 @@ import html
 from database import requests as db
 from keyboards import inline
 import config
-from services import anime_titles, parser, shikimori_sync, stats, voiceovers
+from services import anime_titles, parser, shikimori_sync, stats, voiceovers, yummy, yummy_sync
 from services.subscription_rules import subscription_block_reason
-from utils.states import UpdatesState, ScheduleState
+from utils.states import SearchState, UpdatesState, ScheduleState
 import logging
 
 router = Router()
@@ -101,11 +101,12 @@ async def show_updates_for_vo(message: types.Message, state: FSMContext, names: 
 # --- СТАРТ И КОМАНДЫ ---
 HELP_TEXT = (
     "🤖 <b>Что я умею</b>\n"
-    "Слежу за новыми сериями аниме в озвучке с AnimeGO и пишу, когда на ваших подписках выходит серия.\n\n"
+    "Слежу за новыми сериями аниме в озвучке с AnimeGO и YummyAnime и пишу, когда на ваших подписках выходит серия.\n\n"
     "/menu — меню в чате\n"
     "/updates — свежие серии любимых озвучек\n"
     "/schedule — расписание, отсюда можно подписаться\n"
     "/subs — мои подписки\n"
+    "/find — найти тайтл на YummyAnime и подписаться на его озвучку\n"
     "/voiceovers — любимые озвучки\n"
     "/app — открыть приложение\n"
     "/help — эта справка\n\n"
@@ -137,10 +138,14 @@ async def cmd_start(message: types.Message, state: FSMContext, command: CommandO
 
     # Ссылка на тайтл: t.me/бот?start=a3484
     anime_id = anime_titles.parse_payload(command.args)
-    if anime_id is not None:
+    yummy_id = yummy.parse_payload(command.args)
+    if anime_id is not None or yummy_id is not None:
         if is_new_user:
             await message.answer(welcome_text(message.from_user.first_name), reply_markup=inline.welcome(), parse_mode="HTML")
-        await open_title(message, state, anime_id)
+        if anime_id is not None:
+            await open_title(message, state, anime_id)
+        else:
+            await open_yummy_title(message, state, yummy_id)
         return
 
     if is_new_user:
@@ -622,9 +627,10 @@ async def render_subscriptions(message: types.Message, user_id: int, is_edit: bo
         total_str = sub.total_episodes if sub.total_episodes else "?"
         last_ep_num = sub.last_episode.replace("Серия", "").strip()
 
+        source_mark = " • YummyAnime" if sub.source == yummy_sync.SOURCE else ""
         text_lines.append(
-            f"<b>{i + 1}.</b> <a href='{sub.anime_url}'>{sub.anime_title}</a>\n"
-            f"   └ <i>{sub.voiceover}</i> • [{last_ep_num} / {total_str}]"
+            f"<b>{i + 1}.</b> <a href='{sub.anime_url}'>{html.escape(sub.anime_title)}</a>\n"
+            f"   └ <i>{html.escape(sub.voiceover)}</i> • [{last_ep_num} / {total_str}]{source_mark}"
         )
 
     text_lines.append("\n<i>Нажмите на кнопку с номером, чтобы удалить подписку.</i>")
@@ -661,3 +667,129 @@ async def cb_ignore(callback: types.CallbackQuery):
 @router.callback_query(F.data.startswith(("set_vo_", "sched_sub_vo_")))
 async def cb_outdated_voiceover_buttons(callback: types.CallbackQuery):
     await callback.answer("Меню обновилось — откройте его заново командой /start.", show_alert=True)
+
+
+# --- YUMMYANIME: ПОИСК И ПОДПИСКА ---
+YUMMY_STATUSES = {"ongoing": "онгоинг", "released": "вышел", "anons": "анонс", "announcement": "анонс"}
+
+
+async def search_yummy(message: types.Message, query: str):
+    query = query.strip()[:100]
+    if len(query) < 2:
+        await message.answer("✏️ Напишите хотя бы 2 символа названия.")
+        return
+    msg = await message.answer(f"🔍 Ищу «{html.escape(query)}» на YummyAnime...", parse_mode="HTML")
+    try:
+        results = (await yummy_sync.search(query))[:8]
+    except yummy.YummyError:
+        await msg.edit_text("⚠️ YummyAnime сейчас не отвечает. Попробуйте позже.", reply_markup=inline.back_button())
+        return
+    if not results:
+        await msg.edit_text(f"😔 Ничего не нашёл по запросу «{html.escape(query)}».", reply_markup=inline.back_button(), parse_mode="HTML")
+        return
+
+    lines = [f"🔍 <b>YummyAnime: «{html.escape(query)}»</b>\n"]
+    for index, item in enumerate(results):
+        details = ", ".join(str(part) for part in (item["kind"], item["year"], YUMMY_STATUSES.get(item["status"])) if part)
+        lines.append(f"<b>{index + 1}.</b> {html.escape(item['title'])}" + (f" <i>({html.escape(details)})</i>" if details else ""))
+    lines.append("\n<i>Выберите тайтл, чтобы увидеть озвучки.</i>")
+    await msg.edit_text("\n".join(lines), reply_markup=inline.yummy_results(results), parse_mode="HTML")
+
+
+@router.message(Command("find"))
+async def cmd_find(message: types.Message, state: FSMContext, command: CommandObject):
+    await db.add_user(message.from_user.id, message.from_user.username)
+    if not config.YUMMY_ENABLED:
+        await message.answer("Поиск на YummyAnime сейчас отключён.")
+        return
+    if command.args:
+        await state.clear()
+        await search_yummy(message, command.args)
+        return
+    await state.set_state(SearchState.waiting_query)
+    await message.answer("🔍 Напишите название аниме — поищу на YummyAnime.")
+
+
+@router.callback_query(F.data == "yummy_find")
+async def cb_yummy_find(callback: types.CallbackQuery, state: FSMContext):
+    await callback.answer()
+    await state.set_state(SearchState.waiting_query)
+    await callback.message.edit_text("🔍 Напишите название аниме — поищу на YummyAnime.", reply_markup=inline.back_button())
+
+
+@router.message(StateFilter(SearchState.waiting_query), F.text, ~F.text.startswith("/"))
+async def msg_yummy_query(message: types.Message, state: FSMContext):
+    await state.clear()
+    await search_yummy(message, message.text)
+
+
+@router.callback_query(F.data.startswith("yt:"))
+async def cb_yummy_title(callback: types.CallbackQuery, state: FSMContext):
+    value = callback.data.split(":", 1)[1]
+    if not value.isdigit():
+        await callback.answer()
+        return
+    await callback.answer("🔍 Загружаю озвучки...")
+    await open_yummy_title(callback.message, state, int(value))
+
+
+async def open_yummy_title(message: types.Message, state: FSMContext, anime_id: int):
+    """Тайтл YummyAnime: статус, число серий и озвучки с последней серией"""
+    msg = await message.answer("🔍 Загружаю тайтл с YummyAnime...")
+    try:
+        details = await yummy_sync.title_details(anime_id)
+    except yummy.YummyNotFound:
+        await msg.edit_text("🔍 Такого тайтла на YummyAnime нет.")
+        return
+    except yummy.YummyError:
+        await msg.edit_text("⚠️ YummyAnime сейчас не отвечает. Попробуйте позже.")
+        return
+
+    dubs = details["voiceovers"]
+    title = html.escape(details["title"])
+    status = YUMMY_STATUSES.get(details["status"], details["status"] or "?")
+    episodes = f"{details['episodes_aired'] or 0} / {details['episodes_count'] or '?'}"
+    if not dubs:
+        await msg.edit_text(f"📺 <b>{title}</b>\n⚠️ На YummyAnime пока нет серий в озвучке.", parse_mode="HTML")
+        return
+
+    await state.update_data(yummy_anime_id=anime_id, yummy_dubs=[dub["name"] for dub in dubs])
+    await msg.edit_text(
+        f"📺 <b>{title}</b> <i>(YummyAnime)</i>\n"
+        f"📊 {html.escape(details['kind'] or 'Тайтл')}, {status}, серий: {episodes}\n"
+        "👇 Выберите озвучку — рядом номер последней вышедшей серии:",
+        reply_markup=inline.yummy_voiceovers(dubs, details["url"]),
+        parse_mode="HTML",
+    )
+
+
+@router.callback_query(F.data.startswith("ysub:"))
+async def cb_yummy_subscribe(callback: types.CallbackQuery, state: FSMContext):
+    index = callback.data.split(":", 1)[1]
+    data = await state.get_data()
+    dubs = data.get("yummy_dubs") or []
+    anime_id = data.get("yummy_anime_id")
+    if not index.isdigit() or int(index) >= len(dubs) or anime_id is None:
+        await callback.answer("⚠️ Список устарел, откройте тайтл заново.", show_alert=True)
+        return
+
+    try:
+        created, details, dub = await yummy_sync.subscribe(callback.from_user.id, anime_id, dubs[int(index)])
+    except ValueError as e:
+        await callback.answer(f"⛔️ {e}", show_alert=True)
+        return
+    except yummy.YummyError:
+        await callback.answer("⚠️ YummyAnime сейчас не отвечает. Попробуйте позже.", show_alert=True)
+        return
+
+    if not created:
+        await callback.answer("⚠️ Вы уже подписаны на эту озвучку", show_alert=True)
+        return
+    await stats.increment("subscriptions.created", stats.SOURCE_BOT)
+    await callback.message.edit_text(
+        f"✅ <b>Подписка оформлена!</b>\n\n"
+        f"📺 {html.escape(details['title'])} <i>(YummyAnime)</i>\n"
+        f"🎙 {html.escape(dub['name'])}\n"
+        f"📊 Эпизоды: {dub['last_episode']} / {details['episodes_count'] or '?'}",
+        parse_mode="HTML",
+    )

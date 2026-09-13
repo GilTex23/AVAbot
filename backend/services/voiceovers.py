@@ -1,12 +1,18 @@
 """
-Озвучки: справочник студий с AnimeGO и фильтр ленты по любимым озвучкам.
+Озвучки: справочник студий с AnimeGO и YummyAnime и фильтр ленты по любимым озвучкам.
 
-Справочник пополняется сам — из ленты свежих серий и со страниц тайтлов. Списки в боте и мини-аппе
+Справочник пополняется сам — из лент свежих серий и со страниц тайтлов. Списки в боте и мини-аппе
 упорядочены по популярности: сколько серий озвучки было в ленте за POPULAR_DAYS дней и сколько на неё подписок.
 Любимые озвучки хранятся списком названий; пустой список — все озвучки.
+
+Одна студия на разных сайтах пишется по-разному («RedHeadSound» и «Red Head Sound», «Озвучка Дубляж AniDUB»),
+поэтому названия сравниваются по ключу без регистра, пробелов и знаков, а названия с YummyAnime сводятся
+к уже известным в справочнике (canonical_names).
 """
 import datetime
 import logging
+import re
+import time
 from collections import Counter
 
 from database import requests as db
@@ -18,8 +24,38 @@ POPULAR_DAYS = 60
 MAX_FAVORITES = 20
 
 
+# Переименования и сокращения: ключ -> название, как его пишет AnimeGO
+KNOWN_ALIASES = {
+    "anilibria": "AniLiberty",
+    "anidubonline": "AniDUB",
+    "jam": "JAM CLUB",
+}
+_NON_ALNUM = re.compile(r"[\W_]+", re.UNICODE)
+_CATALOG_TTL = 600
+_catalog_names: tuple[float, dict[str, str]] = (0.0, {})
+
+
 def _key(name: str | None) -> str:
-    return (name or "").strip().lower()
+    return _NON_ALNUM.sub("", (name or "").lower().replace("ё", "е"))
+
+
+def key(name: str | None) -> str:
+    """Ключ для сравнения названий: «Red Head Sound» и «RedHeadSound» — одно и то же"""
+    return _key(name)
+
+
+def clean_source_name(raw: str | None) -> str:
+    """
+    Название озвучки с YummyAnime -> как на AnimeGO: «Озвучка AniDUB Online» -> «AniDUB Online»,
+    «Озвучка Дубляж AniDUB» -> «AniDUB», «Субтитры SubVost» -> «SubVost.Subtitles»
+    """
+    name = " ".join((raw or "").split())
+    for prefix in ("Озвучка ", "Дубляж "):
+        if name.startswith(prefix) and len(name) > len(prefix):
+            name = name[len(prefix):]
+    if name.startswith("Субтитры ") and len(name) > len("Субтитры "):
+        name = f"{name[len('Субтитры '):]}.Subtitles"
+    return name
 
 
 def matches(voiceover: str, studio: str) -> bool:
@@ -68,13 +104,39 @@ def describe(voiceovers: list[str], limit: int = 3) -> str:
 
 async def remember(names) -> None:
     """Записывает встреченные озвучки в справочник; ошибка не мешает основной работе"""
+    global _catalog_names
     names = clean_names(names)
     if not names:
         return
     try:
         await db.touch_voiceovers(names)
+        _catalog_names = (0.0, {})
     except Exception as e:
         logger.error(f"Failed to remember voiceovers {names}: {e}")
+
+
+async def canonical_names(raw_names) -> dict[str, str]:
+    """
+    Сырые названия озвучек из другого источника -> названия из справочника:
+    сначала известные переименования, потом совпадение по ключу, иначе очищенное название как есть
+    """
+    global _catalog_names
+    loaded_at, by_key = _catalog_names
+    if time.monotonic() - loaded_at > _CATALOG_TTL:
+        try:
+            by_key = {}
+            for name in sorted(await db.get_all_voiceover_names()):
+                by_key.setdefault(_key(name), name)
+            _catalog_names = (time.monotonic(), by_key)
+        except Exception as e:
+            logger.error(f"Failed to load voiceover catalog: {e}")
+
+    result = {}
+    for raw in raw_names:
+        cleaned = clean_source_name(raw)
+        cleaned_key = _key(cleaned)
+        result[raw] = KNOWN_ALIASES.get(cleaned_key) or by_key.get(cleaned_key) or cleaned
+    return result
 
 
 async def catalog() -> list[dict]:

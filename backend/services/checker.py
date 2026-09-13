@@ -1,5 +1,5 @@
 from aiogram import Bot
-from services import forecast, health, parser, shikimori_sync, stats
+from services import forecast, health, parser, shikimori_sync, stats, yummy_sync
 from services.notifier import notify_admins
 from utils.antispam import AntiSpamNotify
 from database import requests as db
@@ -97,7 +97,7 @@ def _stale_text(sub) -> str:
     )
 
 
-async def _notify_subscription(bot: Bot, sub, releases: list):
+async def notify_subscription(bot: Bot, sub, releases: list):
     """Уведомляет о сериях, вышедших в озвучке подписки после её последней серии"""
     own = [release for release in releases if forecast.voiceover_matches(sub.voiceover, release.studio)]
     old_ep_num = extract_episode_number(sub.last_episode)
@@ -167,8 +167,10 @@ async def check_updates(bot: Bot):
         for release in await db.get_recent_releases(datetime.utcnow() - NOTIFY_LOOKBACK):
             releases_by_url[release.anime_url].append(release)
 
+        # Подписки на YummyAnime уведомляет yummy_sync — по своему расписанию, даже если AnimeGO недоступен
         for sub in subscriptions:
-            await _notify_subscription(bot, sub, releases_by_url.get(sub.anime_url, []))
+            if sub.source != yummy_sync.SOURCE:
+                await notify_subscription(bot, sub, releases_by_url.get(sub.anime_url, []))
     except Exception as e:
         antispam_updates.failed_requests += 1
         logger.error(f"Checker updates error: {e}")
@@ -200,7 +202,7 @@ async def check_subscriptions_status(bot: Bot, notify_summary: bool = False, for
 
     stats.set_source(stats.SOURCE_STATUS_CHECK)
     async with _status_check_lock:
-        counts = {"checked_urls": 0, "failed_urls": 0, "shikimori_urls": 0, "updated_totals": 0, "completed": 0, "stale": 0}
+        counts = {"checked_urls": 0, "failed_urls": 0, "shikimori_urls": 0, "yummy_urls": 0, "updated_totals": 0, "completed": 0, "stale": 0}
         try:
             logger.info("Starting subscriptions status check...")
             subscriptions = await db.get_all_subscriptions()
@@ -229,8 +231,16 @@ async def check_subscriptions_status(bot: Bot, notify_summary: bool = False, for
 
             titles = await db.get_titles_by_urls(set(url_map))
             for url, subs in url_map.items():
-                from_shikimori = shikimori_sync.status_from_shikimori(titles.get(url), subs, now)
-                if from_shikimori is not None:
+                from_shikimori = None
+                if subs[0].source == yummy_sync.SOURCE:
+                    # YummyAnime отдаёт число серий и статус своим API — страница AnimeGO тут ни при чём
+                    counts["yummy_urls"] += 1
+                    from_yummy = await yummy_sync.status_info(subs[0].source_id)
+                    if from_yummy is None:
+                        counts["failed_urls"] += 1
+                        continue
+                    total, released = from_yummy["total_episodes"], from_yummy["released"]
+                elif (from_shikimori := shikimori_sync.status_from_shikimori(titles.get(url), subs, now)) is not None:
                     counts["shikimori_urls"] += 1
                     total, released = from_shikimori["total_episodes"], from_shikimori["released"]
                 else:
@@ -274,6 +284,7 @@ async def check_subscriptions_status(bot: Bot, notify_summary: bool = False, for
                 "Проверка подписок завершена.\n\n"
                 f"Страниц проверено: <b>{counts['checked_urls']}</b> (ошибок: {counts['failed_urls']})\n"
                 f"По данным Shikimori, без страницы: <b>{counts['shikimori_urls']}</b>\n"
+                f"Тайтлов YummyAnime: <b>{counts['yummy_urls']}</b>\n"
                 f"Обновлено число серий: <b>{counts['updated_totals']}</b>\n"
                 f"Завершённых снято: <b>{counts['completed']}</b>\n"
                 f"Брошенных озвучек снято: <b>{counts['stale']}</b>",

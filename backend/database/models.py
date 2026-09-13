@@ -76,6 +76,25 @@ class ShikimoriAnime(Base):
     synced_at = Column(DateTime, nullable=False, default=datetime.datetime.utcnow)
 
 
+class YummyTitle(Base):
+    """Тайтл YummyAnime: данные из их API, shikimori_id связывает его с тайтлом AnimeGO"""
+    __tablename__ = 'yummy_titles'
+
+    id = Column(Integer, primary_key=True, autoincrement=False)
+    alias = Column(String, nullable=False)
+    url = Column(String, nullable=False)
+    title = Column(String, nullable=False)
+    poster_url = Column(String, nullable=True)
+    shikimori_id = Column(Integer, nullable=True, index=True)
+    kind = Column(String, nullable=True)  # «Сериал», «Полнометражный фильм»...
+    status = Column(String, nullable=True)  # anons, ongoing, released
+    year = Column(Integer, nullable=True)
+    episodes_count = Column(Integer, nullable=True)  # 0 — неизвестно
+    episodes_aired = Column(Integer, nullable=True)
+    next_episode_at = Column(DateTime, nullable=True)  # UTC
+    synced_at = Column(DateTime, nullable=False, default=datetime.datetime.utcnow)
+
+
 class Voiceover(Base):
     """Справочник озвучек: пополняется сам — из ленты свежих серий и со страниц тайтлов"""
     __tablename__ = 'voiceovers'
@@ -95,6 +114,9 @@ class Subscription(Base):
     anime_title = Column(String, nullable=False)
     poster_url = Column(String, nullable=True)
     voiceover = Column(String, nullable=False, default="Unknown")
+    # animego — серии с AnimeGO (anime_url — страница тайтла); yummy — с YummyAnime (source_id — id тайтла в их API)
+    source = Column(String, nullable=False, default="animego", server_default="animego")
+    source_id = Column(String, nullable=True)
 
     total_episodes = Column(Integer, nullable=True)
 

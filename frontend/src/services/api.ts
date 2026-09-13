@@ -11,10 +11,13 @@ import type {
   ShikimoriOverview,
   SubscriptionItem,
   UpdateItem,
+  SourceId,
   UpdatesResponse,
   UserProfile,
   VoiceoverCatalogItem,
   WeekItem,
+  YummyTitle,
+  YummyTitleDetails,
 } from "../lib/types";
 
 const devTgId = import.meta.env.VITE_DEV_TG_ID as string | undefined;
@@ -81,9 +84,32 @@ export function getProfile(): Promise<UserProfile> {
   return fetchJson<UserProfile>("/api/miniapp/me");
 }
 
-/** Без voiceover — по любимым озвучкам; ALL_VOICEOVERS — все серии */
-export function getUpdates(voiceover?: string | null): Promise<UpdatesResponse> {
-  return fetchJson(voiceover ? `/api/miniapp/updates?voiceover=${encodeURIComponent(voiceover)}` : "/api/miniapp/updates");
+/** Без voiceover — по любимым озвучкам; ALL_VOICEOVERS — все серии; source — лента AnimeGO или YummyAnime */
+export function getUpdates(voiceover?: string | null, source: SourceId = "animego"): Promise<UpdatesResponse> {
+  const params = new URLSearchParams();
+  if (voiceover) {
+    params.set("voiceover", voiceover);
+  }
+  if (source !== "animego") {
+    params.set("source", source);
+  }
+  const query = params.toString();
+  return fetchJson(query ? `/api/miniapp/updates?${query}` : "/api/miniapp/updates");
+}
+
+export function searchYummy(query: string): Promise<{ items: YummyTitle[] }> {
+  return fetchJson(`/api/miniapp/yummy/search?q=${encodeURIComponent(query)}`);
+}
+
+export function getYummyAnime(id: number): Promise<YummyTitleDetails> {
+  return fetchJson(`/api/miniapp/yummy/anime/${id}`);
+}
+
+export function addYummySubscription(id: number, voiceover: string) {
+  return fetchJson<{ ok: boolean; created: boolean }>("/api/miniapp/subscriptions", {
+    method: "POST",
+    body: JSON.stringify({ source: "yummy", source_id: String(id), voiceover }),
+  });
 }
 
 export function getVoiceovers(): Promise<{ items: VoiceoverCatalogItem[]; popular_days: number }> {
@@ -95,6 +121,9 @@ export function getSubscriptions(): Promise<{ items: SubscriptionItem[] }> {
 }
 
 export function addSubscription(item: UpdateItem) {
+  if (item.source === "yummy" && item.source_id) {
+    return addYummySubscription(Number(item.source_id), item.studio);
+  }
   return fetchJson<{ ok: boolean; created: boolean }>("/api/miniapp/subscriptions", {
     method: "POST",
     body: JSON.stringify({

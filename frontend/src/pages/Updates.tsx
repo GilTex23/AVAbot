@@ -5,7 +5,7 @@ import { Button } from "../components/ui/button";
 import { Card } from "../components/ui/card";
 import { LazyImage } from "../components/ui/LazyImage";
 import { addSubscription, errorText, getSubscriptions, getUpdates } from "../services/api";
-import type { SubscriptionItem, UpdateItem, UpdatesResponse } from "../lib/types";
+import type { SourceId, SubscriptionItem, UpdateItem, UpdatesResponse } from "../lib/types";
 import { buildSubscriptionIndex, subscriptionKey } from "../lib/subscriptions";
 import { hapticNotification } from "../lib/telegram";
 import { ALL_VOICEOVERS, describeVoiceovers, openAnime } from "../lib/utils";
@@ -18,6 +18,7 @@ type UpdatesProps = {
 export function Updates({ favoriteVoiceovers, refreshKey }: UpdatesProps) {
   // null — любимые озвучки (если их нет, сервер отдаёт все), ALL_VOICEOVERS — все, иначе одна озвучка
   const [selectedVoiceover, setSelectedVoiceover] = useState<string | null>(null);
+  const [source, setSource] = useState<SourceId>("animego");
   const [studios, setStudios] = useState<UpdatesResponse["studios"]>([]);
   const [items, setItems] = useState<UpdateItem[]>([]);
   const [subscriptions, setSubscriptions] = useState<SubscriptionItem[]>([]);
@@ -40,7 +41,7 @@ export function Updates({ favoriteVoiceovers, refreshKey }: UpdatesProps) {
     let cancelled = false;
     setLoading(true);
     setNotice(null);
-    Promise.all([getUpdates(selectedVoiceover), getSubscriptions()])
+    Promise.all([getUpdates(selectedVoiceover, source), getSubscriptions()])
       .then(([updatesData, subscriptionsData]) => {
         if (!cancelled) {
           setItems(updatesData.items);
@@ -61,7 +62,7 @@ export function Updates({ favoriteVoiceovers, refreshKey }: UpdatesProps) {
     return () => {
       cancelled = true;
     };
-  }, [selectedVoiceover, refreshKey]);
+  }, [selectedVoiceover, source, refreshKey]);
 
   async function subscribe(item: UpdateItem) {
     const key = subscriptionKey(item.link, item.studio);
@@ -79,6 +80,8 @@ export function Updates({ favoriteVoiceovers, refreshKey }: UpdatesProps) {
             link: item.link,
             poster_url: item.poster_url,
             voiceover: item.studio,
+            source: item.source,
+            source_id: item.source_id,
             last_episode: item.episode,
             total_episodes: null,
           },
@@ -105,6 +108,25 @@ export function Updates({ favoriteVoiceovers, refreshKey }: UpdatesProps) {
       </section>
 
       {notice ? <div className="notice">{notice}</div> : null}
+
+      <div className="source-switch" role="tablist" aria-label="Источник">
+        {(["animego", "yummy"] as SourceId[]).map((value) => (
+          <button
+            key={value}
+            type="button"
+            role="tab"
+            aria-selected={source === value}
+            className={source === value ? "source-switch__item source-switch__item--active" : "source-switch__item"}
+            onClick={() => {
+              setSource(value);
+              setStudios([]);
+              setSelectedVoiceover(null);
+            }}
+          >
+            {value === "animego" ? "AnimeGO" : "YummyAnime"}
+          </button>
+        ))}
+      </div>
 
       <div className="chip-row" aria-label="Фильтр озвучки">
         {hasFavorites ? (

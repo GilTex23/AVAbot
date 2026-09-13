@@ -3,6 +3,9 @@ from aiogram.fsm.state import StatesGroup, State
 class UpdatesState(StatesGroup):
     viewing_list = State()
 
+class SearchState(StatesGroup):
+    waiting_query = State()
+
 class ScheduleState(StatesGroup):
     viewing_schedule = State()
     selecting_voiceover = State()
