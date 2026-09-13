@@ -4,7 +4,8 @@
 AnimeGO подписывает время поясом IP прокси («16:00 (Самара)»). Если подписи нет в TIMEZONE_LABELS,
 время с такой страницы не используется, а админ получает сообщение о каждой такой загрузке:
 с примерами со страницы, смещением, вычисленным по сериям с уже известным временем выхода,
-и готовой строкой для timezone_labels.py.
+и готовой строкой для MANUAL_LABELS в scripts/generate_timezone_labels.py.
+Страны и города из CLDR уже есть в сгенерированном словаре, так что сюда попадают только подписи, которых нет в CLDR.
 """
 import datetime
 import hashlib
@@ -121,12 +122,13 @@ async def report_unknown_timezone(
             f"По сериям с уже известным временем выхода это {format_offset(offset)}"
             + (f": {', '.join(zones)}." if zones else ".")
         )
+        lines.append("Совпадает только текущее смещение — проверьте, что у выбранного пояса те же переходы на летнее время.")
     else:
         lines.append("Смещение определить не удалось: по сериям на этой странице ещё нет истории.")
 
     lines += [
         "",
-        "Чтобы бот понимал эту подпись, добавьте в backend/services/timezone_labels.py:",
+        "Чтобы бот понимал эту подпись, добавьте в MANUAL_LABELS (backend/scripts/generate_timezone_labels.py) и пересоберите словарь:",
         f"<code>{html.escape(repr(label), quote=False)}: {html.escape(repr(zone or 'Регион/Город'), quote=False)},</code>",
     ]
 

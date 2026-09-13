@@ -60,6 +60,22 @@ def test_timezone_labels():
     assert "Восточная Европа" not in TIMEZONE_LABELS
 
 
+def test_timezone_labels_seen_on_animego():
+    # Страна с одним поясом называется страной, иначе — город; пояс должен совпадать и после перехода на зимнее время
+    assert TIMEZONE_LABELS["Хорватия"] == "Europe/Zagreb"
+    assert TIMEZONE_LABELS["Польша"] == "Europe/Warsaw"
+    assert TIMEZONE_LABELS["Австрия"] == "Europe/Vienna"
+    assert TIMEZONE_LABELS["Великобритания"] == "Europe/London"
+    assert TIMEZONE_LABELS["Молдова"] == "Europe/Chisinau"
+    assert TIMEZONE_LABELS["Беларусь"] == "Europe/Minsk"
+    assert TIMEZONE_LABELS["Томск"] == "Asia/Tomsk"
+    assert TIMEZONE_LABELS["Алматы"] == "Asia/Almaty"
+    assert TIMEZONE_LABELS["Самара"] == "Europe/Samara"
+    assert TIMEZONE_LABELS["Калининград"] == "Europe/Kaliningrad"
+    for zone_name in TIMEZONE_LABELS.values():
+        ZoneInfo(zone_name)
+
+
 def test_moscow_page_feed(fixture_html):
     zone, updates, _ = parse(fixture_html("animego_home_moscow.html"))
     assert str(zone) == "Europe/Moscow"
