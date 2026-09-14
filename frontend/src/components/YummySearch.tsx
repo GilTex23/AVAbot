@@ -5,6 +5,7 @@ import { Button } from "./ui/button";
 import { Card } from "./ui/card";
 import { Input } from "./ui/input";
 import { LazyImage } from "./ui/LazyImage";
+import { formatRating, Ratings } from "./Ratings";
 import { buildSubscriptionIndex, subscriptionKey } from "../lib/subscriptions";
 import { hapticNotification } from "../lib/telegram";
 import type { SubscriptionItem, YummyTitle, YummyTitleDetails } from "../lib/types";
@@ -132,7 +133,10 @@ export function YummySearch({ subscriptions, onSubscribed }: YummySearchProps) {
               <LazyImage className="yummy-result__poster" src={title.poster_url || undefined} alt={title.title} />
               <span className="yummy-result__body">
                 <span className="yummy-result__title">{title.title}</span>
-                <span className="muted-copy">{describeYummyTitle(title)}</span>
+                <span className="muted-copy">
+                  {title.rating ? <span className="yummy-result__rating">★ {formatRating(title.rating)}</span> : null}
+                  {describeYummyTitle(title)}
+                </span>
               </span>
               {loadingId === title.id ? <Loader2 className="spin" size={18} /> : <Plus size={18} />}
             </button>
@@ -147,6 +151,7 @@ export function YummySearch({ subscriptions, onSubscribed }: YummySearchProps) {
               <div>
                 <h2>{details.title}</h2>
                 <p>{describeYummyTitle(details)}</p>
+                <Ratings items={details.ratings} />
               </div>
               <div className="modal-card__actions">
                 {titleDeepLink(details.url, "yummy", String(details.id)) ? (

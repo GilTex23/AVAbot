@@ -1,5 +1,5 @@
 from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
-from sqlalchemy import select, update, delete, and_, case, func, text
+from sqlalchemy import String, select, update, delete, and_, case, func, text
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.orm import joinedload
 from database.models import (
@@ -150,6 +150,9 @@ async def upsert_title_meta(row: dict):
                 "kind": excluded.kind,
                 "aired_on": excluded.aired_on,
                 "episodes": excluded.episodes,
+                # Оценка меняется постоянно и на поиск на Shikimori не влияет; пустую не записываем поверх известной
+                "rating": func.coalesce(excluded.rating, AnimeTitle.rating),
+                "rating_votes": func.coalesce(excluded.rating_votes, AnimeTitle.rating_votes),
                 "updated_at": excluded.updated_at,
                 "meta_updated_at": case((changed, excluded.meta_updated_at), else_=AnimeTitle.meta_updated_at),
             },
@@ -172,6 +175,48 @@ async def get_subscribed_titles():
             .order_by(counts.c.subscriptions.desc(), AnimeTitle.title)
         )
         return [(title, count) for title, count in result.unique().all()]
+
+
+async def get_titles_by_shikimori_ids(ids: set[int]) -> dict:
+    """Сопоставленные тайтлы AnimeGO по id на Shikimori"""
+    if not ids:
+        return {}
+    async with async_session() as session:
+        result = await session.scalars(
+            select(AnimeTitle).where(AnimeTitle.shikimori_id.in_(ids), AnimeTitle.shikimori_status.in_(("matched", "manual")))
+        )
+        return {title.shikimori_id: title for title in result.unique().all()}
+
+
+async def get_shikimori_animes(ids: set[int]) -> dict:
+    if not ids:
+        return {}
+    async with async_session() as session:
+        result = await session.scalars(select(ShikimoriAnime).where(ShikimoriAnime.id.in_(ids)))
+        return {anime.id: anime for anime in result.all()}
+
+
+async def get_yummy_titles_by_shikimori_ids(ids: set[int]) -> dict:
+    if not ids:
+        return {}
+    async with async_session() as session:
+        result = await session.scalars(select(YummyTitle).where(YummyTitle.shikimori_id.in_(ids)).order_by(YummyTitle.synced_at.desc()))
+        found = {}
+        for title in result.all():
+            found.setdefault(title.shikimori_id, title)
+        return found
+
+
+async def get_subscribed_yummy_shikimori_ids() -> set[int]:
+    """Id на Shikimori у тайтлов YummyAnime, на которые есть подписки"""
+    async with async_session() as session:
+        result = await session.scalars(
+            select(YummyTitle.shikimori_id)
+            .join(Subscription, and_(Subscription.source == "yummy", Subscription.source_id == func.cast(YummyTitle.id, String)))
+            .where(YummyTitle.shikimori_id.is_not(None))
+            .distinct()
+        )
+        return set(result.all())
 
 
 async def get_titles_by_urls(urls: set[str]) -> dict:

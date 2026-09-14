@@ -86,7 +86,8 @@ def test_parse_title_page(fixture_html):
     assert shikimori_match.TitleMeta(russian=meta["title"], english=meta["english_title"]).search_queries() == [BLEACH_META.russian, BLEACH_META.english]
     # Страница без JSON-LD и синонимов
     empty = parser.parse_title_meta(BeautifulSoup("<h1>Название</h1>", "html.parser"))
-    assert empty == {"title": "Название", "alt_names": [], "english_title": None, "kind": None, "aired_on": None, "episodes": None, "poster_url": None}
+    assert empty == {"title": "Название", "alt_names": [], "english_title": None, "kind": None, "aired_on": None, "episodes": None, "poster_url": None,
+                     "rating": None, "rating_votes": None}
 
 
 def test_client_helpers():

@@ -148,6 +148,10 @@ async def sync(force: bool = False) -> dict | None:
             title.shikimori_id for title in titles
             if title.shikimori_status in MATCHED_STATUSES and title.shikimori_id and (force or refresh_due(title.shikimori, now))
         ]
+        # Тайтлы подписок на YummyAnime связаны с Shikimori напрямую — их оценка и данные тоже нужны
+        yummy_ids = await db.get_subscribed_yummy_shikimori_ids()
+        known = await db.get_shikimori_animes(yummy_ids)
+        stale_ids += [id_ for id_ in yummy_ids if id_ not in stale_ids and (force or refresh_due(known.get(id_), now))]
         if stale_ids:
             try:
                 rows = [shikimori.to_row(anime) for anime in await shikimori.get_by_ids(stale_ids)]

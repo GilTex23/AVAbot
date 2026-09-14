@@ -6,6 +6,7 @@ import { Button } from "../components/ui/button";
 import { Card } from "../components/ui/card";
 import { LazyImage } from "../components/ui/LazyImage";
 import { ClampedTitle } from "../components/ClampedTitle";
+import { Ratings } from "../components/Ratings";
 import { getMyWeek } from "../services/api";
 import { dayKey, useTimeZone } from "../lib/timezones";
 import type { WeekItem } from "../lib/types";
@@ -115,6 +116,7 @@ export function MyWeek({ refreshKey }: MyWeekProps) {
                   <div className="subscription-row__meta">
                     <Badge tone="red">{item.voiceover}</Badge>
                   </div>
+                  <Ratings items={item.ratings} />
                   <NextEpisode forecast={item.forecast} />
                 </div>
                 <div className="subscription-row__actions">

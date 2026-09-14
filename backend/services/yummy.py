@@ -128,6 +128,7 @@ def timestamp(value) -> datetime.datetime | None:
 def title_row(anime: dict) -> dict:
     """Ответ /anime/{id} или /search -> строка yummy_titles"""
     episodes = anime.get("episodes") or {}
+    rating = anime.get("rating") or {}
     return {
         "id": int(anime["anime_id"]),
         "alias": anime["anime_url"],
@@ -141,6 +142,9 @@ def title_row(anime: dict) -> dict:
         "episodes_count": episodes.get("count"),
         "episodes_aired": episodes.get("aired"),
         "next_episode_at": timestamp(episodes.get("next_date")),
+        # Только своя оценка: копии оценок других сайтов у YummyAnime устаревают
+        "rating": round(float(rating["average"]), 2) if rating.get("average") else None,
+        "rating_votes": rating.get("counters") or None,
     }
 
 

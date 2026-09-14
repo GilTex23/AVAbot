@@ -24,7 +24,7 @@ SEARCH_LIMIT = 10
 
 ANIME_FIELDS = """
     id name russian english japanese synonyms kind status episodes episodesAired
-    airedOn { date } releasedOn { date } nextEpisodeAt url
+    airedOn { date } releasedOn { date } nextEpisodeAt score url
 """
 SEARCH_QUERY = f"query($search: String, $limit: PositiveInt) {{ animes(search: $search, limit: $limit) {{ {ANIME_FIELDS} }} }}"
 IDS_QUERY = f"query($ids: String, $limit: PositiveInt) {{ animes(ids: $ids, limit: $limit) {{ {ANIME_FIELDS} }} }}"
@@ -124,6 +124,8 @@ def to_row(anime: dict) -> dict:
         "next_episode_at": _utc_naive(anime.get("nextEpisodeAt")),
         "aired_on": _date((anime.get("airedOn") or {}).get("date")),
         "released_on": _date((anime.get("releasedOn") or {}).get("date")),
+        # У анонсов Shikimori отдаёт 0 — это не оценка
+        "score": anime.get("score") or None,
         "url": anime.get("url"),
     }
 

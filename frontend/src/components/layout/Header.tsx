@@ -13,7 +13,7 @@ export function Header({ user, refreshing = false, onRefresh }: HeaderProps) {
     <header className="header">
       <div className="brand">
         <span className="brand__name">Anime Notify</span>
-        <span className="brand__caption">данные animego.me</span>
+        <span className="brand__caption">новые серии в озвучке</span>
       </div>
 
       <div className="header__actions">

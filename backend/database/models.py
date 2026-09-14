@@ -1,4 +1,4 @@
-from sqlalchemy import BigInteger, Boolean, String, Column, ForeignKey, Integer, DateTime, Date, UniqueConstraint, Index, text
+from sqlalchemy import BigInteger, Boolean, String, Column, ForeignKey, Integer, DateTime, Date, Float, UniqueConstraint, Index, text
 from sqlalchemy.dialects.postgresql import ARRAY, JSONB
 from sqlalchemy.orm import DeclarativeBase, relationship
 from sqlalchemy.ext.asyncio import AsyncAttrs
@@ -43,6 +43,9 @@ class AnimeTitle(Base):
     kind = Column(String, nullable=True)  # «Сериал», «Фильм», «OVA»...
     aired_on = Column(Date, nullable=True)
     episodes = Column(Integer, nullable=True)
+    # Оценка пользователей AnimeGO (из 10) — берётся, когда страница тайтла и так загружается
+    rating = Column(Float, nullable=True)
+    rating_votes = Column(Integer, nullable=True)
     # Когда эти данные последний раз менялись: незнакомый тайтл стоит поискать на Shikimori снова
     meta_updated_at = Column(DateTime, nullable=True)
 
@@ -72,6 +75,7 @@ class ShikimoriAnime(Base):
     next_episode_at = Column(DateTime, nullable=True)  # UTC
     aired_on = Column(Date, nullable=True)
     released_on = Column(Date, nullable=True)
+    score = Column(Float, nullable=True)  # оценка на Shikimori; у анонсов её нет
     url = Column(String, nullable=True)
     synced_at = Column(DateTime, nullable=False, default=datetime.datetime.utcnow)
 
@@ -92,6 +96,8 @@ class YummyTitle(Base):
     episodes_count = Column(Integer, nullable=True)  # 0 — неизвестно
     episodes_aired = Column(Integer, nullable=True)
     next_episode_at = Column(DateTime, nullable=True)  # UTC
+    rating = Column(Float, nullable=True)  # собственная оценка YummyAnime
+    rating_votes = Column(Integer, nullable=True)
     synced_at = Column(DateTime, nullable=False, default=datetime.datetime.utcnow)
 
 

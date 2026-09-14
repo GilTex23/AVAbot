@@ -741,6 +741,7 @@ def parse_title_meta(soup) -> dict:
         kind = label.find_next_sibling('div').get_text(strip=True) or None
 
     episodes = ld.get('numberOfEpisodes')
+    rating, rating_votes = parse_rating(soup, ld)
     return {
         'title': title or ld.get('name'),
         'alt_names': [name for name in alt_names if name and name != title],
@@ -749,7 +750,33 @@ def parse_title_meta(soup) -> dict:
         'aired_on': aired_on,
         'episodes': episodes if isinstance(episodes, int) and episodes > 0 else None,
         'poster_url': clean_asset_url(ld.get('image')) if isinstance(ld.get('image'), str) else None,
+        'rating': rating,
+        'rating_votes': rating_votes,
     }
+
+
+def _number(text) -> float | None:
+    try:
+        value = float(str(text).strip().replace(',', '.').replace('\xa0', '').replace(' ', ''))
+    except (TypeError, ValueError):
+        return None
+    return value
+
+
+def parse_rating(soup, ld: dict | None = None) -> tuple[float | None, int | None]:
+    """
+    Оценка пользователей AnimeGO: «9,0» и число голосов из блока рейтинга, иначе — из JSON-LD (там она округлена).
+    Без голосов оценки нет: (None, None)
+    """
+    value_tag, count_tag = soup.find(class_='entity-rating__value'), soup.find(class_='entity-rating__count')
+    value = _number(value_tag.get_text(strip=True)) if value_tag else None
+    votes = _number(count_tag.get_text(strip=True)) if count_tag else None
+    if value is None:
+        aggregate = (ld or {}).get('aggregateRating') or {}
+        value, votes = _number(aggregate.get('ratingValue')), _number(aggregate.get('ratingCount'))
+    if value is None or not votes or not 0 < value <= 10:
+        return None, None
+    return round(value, 2), int(votes)
 
 
 async def _remember_title_page(url: str, soup) -> None:
@@ -801,6 +828,8 @@ async def get_anime_details(url: str, bot: Bot):
                     voiceovers_list.append(vo_name)
 
         info['available_voiceovers'] = voiceovers_list
+        meta = parse_title_meta(soup)
+        info['rating'], info['rating_votes'] = meta['rating'], meta['rating_votes']
         await voiceovers.remember(voiceovers_list)
         await _remember_title_page(url, soup)
 

@@ -8,7 +8,7 @@ import html
 from database import requests as db
 from keyboards import inline
 import config
-from services import anime_titles, parser, shikimori_sync, stats, voiceovers, yummy, yummy_sync
+from services import anime_titles, parser, ratings, shikimori_sync, stats, voiceovers, yummy, yummy_sync
 from services.subscription_rules import subscription_block_reason
 from utils.states import SearchState, UpdatesState, ScheduleState
 import logging
@@ -540,9 +540,11 @@ async def offer_voiceovers(msg: types.Message, state: FSMContext, title: str, ur
     )
 
     total = info['total_episodes'] or "?"
+    rating_line = ratings.describe(await ratings.for_animego_title(url, info))
     await msg.edit_text(
         f"📺 <b>{safe_title}</b>\n"
         f"📊 Серий: {total}\n"
+        + (f"{rating_line}\n" if rating_line else "") +
         f"👇 Выберите озвучку для подписки:",
         reply_markup=inline.anime_voiceovers_list(anime_voiceovers, url),
         parse_mode="HTML"
@@ -754,9 +756,11 @@ async def open_yummy_title(message: types.Message, state: FSMContext, anime_id: 
         return
 
     await state.update_data(yummy_anime_id=anime_id, yummy_dubs=[dub["name"] for dub in dubs])
+    rating_line = ratings.describe(await ratings.for_yummy_title(details))
     await msg.edit_text(
         f"📺 <b>{title}</b> <i>(YummyAnime)</i>\n"
         f"📊 {html.escape(details['kind'] or 'Тайтл')}, {status}, серий: {episodes}\n"
+        + (f"{rating_line}\n" if rating_line else "") +
         "👇 Выберите озвучку — рядом номер последней вышедшей серии:",
         reply_markup=inline.yummy_voiceovers(dubs, details["url"]),
         parse_mode="HTML",

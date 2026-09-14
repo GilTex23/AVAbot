@@ -12,7 +12,7 @@ from fastapi import APIRouter, Depends, HTTPException, Request, status
 import config
 from database import requests as db
 from loader import bot
-from services import anime_titles, forecast, parser, shikimori_sync, stats, voiceovers, yummy, yummy_sync
+from services import anime_titles, forecast, parser, ratings, shikimori_sync, stats, voiceovers, yummy, yummy_sync
 from services.subscription_rules import subscription_block_reason
 
 logger = logging.getLogger(__name__)
@@ -80,7 +80,16 @@ async def sync_miniapp_user(current_user: dict):
     )
 
 
-def _serialize_subscription(sub, next_episode: dict | None = None) -> dict:
+async def _ratings_for(subscriptions) -> dict[int, list[dict]]:
+    try:
+        return await ratings.for_subscriptions(subscriptions)
+    except Exception as e:
+        # Оценки — дополнение: без них список всё равно должен открываться
+        logger.error(f"Failed to load ratings: {e}")
+        return {}
+
+
+def _serialize_subscription(sub, next_episode: dict | None = None, rating_items: list[dict] | None = None) -> dict:
     return {
         "id": sub.id,
         "title": sub.anime_title,
@@ -92,6 +101,7 @@ def _serialize_subscription(sub, next_episode: dict | None = None) -> dict:
         "last_episode": sub.last_episode,
         "total_episodes": sub.total_episodes,
         "next_episode": next_episode,
+        "ratings": rating_items or [],
     }
 
 
@@ -182,7 +192,8 @@ async def get_subscriptions(current_user: dict = Depends(get_miniapp_user)):
         # Прогноз — дополнение: без него список подписок всё равно должен открываться
         logger.error(f"Failed to build episode forecasts: {e}")
         forecasts = {}
-    return {"items": [_serialize_subscription(sub, forecasts.get(sub.id)) for sub in subscriptions]}
+    rating_items = await _ratings_for(subscriptions)
+    return {"items": [_serialize_subscription(sub, forecasts.get(sub.id), rating_items.get(sub.id)) for sub in subscriptions]}
 
 
 @router.get("/my-week")
@@ -192,9 +203,10 @@ async def get_my_week(current_user: dict = Depends(get_miniapp_user)):
     subscriptions = await db.get_user_subscriptions(int(current_user["id"]))
     by_id = {sub.id: sub for sub in subscriptions}
     week = await forecast.build_week(subscriptions)
+    rating_items = await _ratings_for(subscriptions)
     return {
         "items": [
-            {**_serialize_subscription(by_id[item["subscription_id"]]), "forecast": item["forecast"]}
+            {**_serialize_subscription(by_id[item["subscription_id"]], None, rating_items.get(item["subscription_id"])), "forecast": item["forecast"]}
             for item in week
         ]
     }
@@ -212,6 +224,8 @@ def _serialize_yummy_title(details: dict) -> dict:
         "total_episodes": details["episodes_count"] or None,
         "episodes_aired": details["episodes_aired"],
         "next_episode_at": details["next_episode_at"].isoformat() + "Z" if details.get("next_episode_at") else None,
+        "rating": details.get("rating"),
+        "rating_votes": details.get("rating_votes"),
     }
 
 
@@ -243,6 +257,7 @@ async def get_yummy_anime(anime_id: int, current_user: dict = Depends(get_miniap
         raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail="YummyAnime временно недоступен")
     return {
         **_serialize_yummy_title(details),
+        "ratings": await ratings.for_yummy_title(details),
         "voiceovers": [
             {"name": dub["name"], "last_episode": dub["last_episode"], "updated_at": dub["updated_at"].isoformat() + "Z"}
             for dub in details["voiceovers"]
@@ -326,6 +341,7 @@ async def get_anime_details(link: str, current_user: dict = Depends(get_miniapp_
         "status": info.get("status"),
         "total_episodes": info.get("total_episodes"),
         "voiceovers": info.get("available_voiceovers") or [],
+        "ratings": await ratings.for_animego_title(link, info),
     }
 
 

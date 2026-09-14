@@ -6,6 +6,7 @@ import { Button } from "../components/ui/button";
 import { Card } from "../components/ui/card";
 import { LazyImage } from "../components/ui/LazyImage";
 import { ClampedTitle } from "../components/ClampedTitle";
+import { Ratings } from "../components/Ratings";
 import { deleteSubscription, getSubscriptions } from "../services/api";
 import type { SubscriptionItem } from "../lib/types";
 import { hapticNotification } from "../lib/telegram";
@@ -90,6 +91,7 @@ export function Subscriptions({ refreshKey }: SubscriptionsProps) {
                     {item.last_episode || "Серия ?"} / {item.total_episodes || "?"}
                   </span>
                 </div>
+                <Ratings items={item.ratings} />
                 {item.next_episode ? <NextEpisode forecast={item.next_episode} /> : null}
               </div>
               <div className="subscription-row__actions">

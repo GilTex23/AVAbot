@@ -13,7 +13,7 @@ export function AccessGate() {
         </div>
         <h1>Открой мини-приложение в Telegram</h1>
         <p>
-          Бот следит за новыми сериями, расписанием выхода и выбранными озвучками. Данные берутся с сайта animego.me, а доступ к настройкам
+          Бот следит за новыми сериями, расписанием выхода и выбранными озвучками. Серии — с AnimeGO и YummyAnime, данные о тайтлах — с Shikimori, а доступ к настройкам
           подписок защищен через Telegram.
         </p>
         <Button variant="primary" onClick={() => openTelegramLink(botUrl)}>

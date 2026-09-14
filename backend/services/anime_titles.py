@@ -50,6 +50,8 @@ async def remember_meta(url: str, meta: dict) -> None:
         "kind": meta.get("kind"),
         "aired_on": meta.get("aired_on"),
         "episodes": meta.get("episodes"),
+        "rating": meta.get("rating"),
+        "rating_votes": meta.get("rating_votes"),
     })
 
 

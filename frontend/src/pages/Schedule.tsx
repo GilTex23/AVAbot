@@ -10,6 +10,7 @@ import type { AnimeDetails, ScheduleDay, ScheduleItem, SubscriptionItem } from "
 import { buildSubscriptionIndex, normalizeAnimeLink, subscriptionKey } from "../lib/subscriptions";
 import { hapticNotification } from "../lib/telegram";
 import { openAnime, shareTitle, titleDeepLink } from "../lib/utils";
+import { Ratings } from "../components/Ratings";
 import { MyWeek } from "./MyWeek";
 
 type ScheduleProps = {
@@ -231,6 +232,7 @@ function FullSchedule({ refreshKey }: ScheduleProps) {
               <div>
                 <h2>{modal.item.title}</h2>
                 <p>Выберите озвучку для подписки</p>
+                <Ratings items={modal.details.ratings} />
               </div>
               <div className="modal-card__actions">
                 {titleDeepLink(modal.item.link) ? (

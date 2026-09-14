@@ -14,6 +14,14 @@ export type UserProfile = {
 
 export type SourceId = "animego" | "yummy";
 
+/** Оценка тайтла на сайте (из 10) */
+export type RatingItem = {
+  source: "animego" | "shikimori" | "yummy";
+  value: number;
+  votes?: number | null;
+  url?: string | null;
+};
+
 export type UpdateItem = {
   title: string;
   episode: string;
@@ -36,9 +44,13 @@ export type YummyTitle = {
   total_episodes?: number | null;
   episodes_aired?: number | null;
   next_episode_at?: string | null;
+  /** Собственная оценка YummyAnime */
+  rating?: number | null;
+  rating_votes?: number | null;
 };
 
 export type YummyTitleDetails = YummyTitle & {
+  ratings?: RatingItem[];
   voiceovers: Array<{ name: string; last_episode: number; updated_at: string }>;
 };
 
@@ -166,6 +178,7 @@ export type SubscriptionItem = {
   last_episode?: string | null;
   total_episodes?: number | null;
   next_episode?: NextEpisodeForecast | null;
+  ratings?: RatingItem[];
 };
 
 /** Серия из «Моих серий на неделе»: подписка + прогноз конкретной серии */
@@ -185,6 +198,7 @@ export type AnimeDetails = {
   status?: string | null;
   total_episodes?: number | null;
   voiceovers: string[];
+  ratings?: RatingItem[];
 };
 
 export type ScheduleDay = {
