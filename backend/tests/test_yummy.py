@@ -2,6 +2,7 @@
 import copy
 import datetime as dt
 import json
+from types import SimpleNamespace
 
 import pytest
 from aiogram.methods import AnswerCallbackQuery, EditMessageText, SendMessage
@@ -27,8 +28,10 @@ async def test_voiceover_names_from_yummy(monkeypatch):
         return ["AniDUB", "RedHeadSound", "AniLiberty", "JAM CLUB"]
 
     monkeypatch.setattr(voiceovers.db, "get_all_voiceover_names", catalog)
-    monkeypatch.setattr(voiceovers, "_catalog_names", (0.0, {}))
-    raw = ["Озвучка Дубляж AniDUB", "Озвучка AniDUB Online", "Озвучка Red Head Sound", "Озвучка AniLibria", "Озвучка JAM",
+    monkeypatch.setattr(voiceovers, "_catalog_names", (None, {}))
+    # Как на только что запущенной машине (CI, сервер после перезагрузки): monotonic() меньше TTL кэша
+    monkeypatch.setattr(voiceovers, "time", SimpleNamespace(monotonic=lambda: 5.0))
+    raw =["Озвучка Дубляж AniDUB", "Озвучка AniDUB Online", "Озвучка Red Head Sound", "Озвучка AniLibria", "Озвучка JAM",
            "Субтитры SubVost", "Озвучка Комната Диди", "Субтитры"]
     assert await voiceovers.canonical_names(raw) == {
         "Озвучка Дубляж AniDUB": "AniDUB",
@@ -99,7 +102,7 @@ async def fake_yummy(monkeypatch):
     monkeypatch.setattr(yummy_sync, "_feed_cache", (0.0, []))
     monkeypatch.setattr(yummy_sync, "_failed_cycles", 0)
     monkeypatch.setattr(yummy_sync, "_alerted", False)
-    monkeypatch.setattr(voiceovers, "_catalog_names", (0.0, {}))
+    monkeypatch.setattr(voiceovers, "_catalog_names", (None, {}))
     yield state
     await runner.cleanup()
 

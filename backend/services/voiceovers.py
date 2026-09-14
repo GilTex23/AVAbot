@@ -32,7 +32,9 @@ KNOWN_ALIASES = {
 }
 _NON_ALNUM = re.compile(r"[\W_]+", re.UNICODE)
 _CATALOG_TTL = 600
-_catalog_names: tuple[float, dict[str, str]] = (0.0, {})
+# (когда загружен по time.monotonic(), ключ -> название); None — не загружен.
+# Не 0.0: сразу после загрузки системы monotonic() меньше TTL, и пустой кэш сошёл бы за свежий
+_catalog_names: tuple[float | None, dict[str, str]] = (None, {})
 
 
 def _key(name: str | None) -> str:
@@ -110,7 +112,7 @@ async def remember(names) -> None:
         return
     try:
         await db.touch_voiceovers(names)
-        _catalog_names = (0.0, {})
+        _catalog_names = (None, {})
     except Exception as e:
         logger.error(f"Failed to remember voiceovers {names}: {e}")
 
@@ -122,7 +124,7 @@ async def canonical_names(raw_names) -> dict[str, str]:
     """
     global _catalog_names
     loaded_at, by_key = _catalog_names
-    if time.monotonic() - loaded_at > _CATALOG_TTL:
+    if loaded_at is None or time.monotonic() - loaded_at > _CATALOG_TTL:
         try:
             by_key = {}
             for name in sorted(await db.get_all_voiceover_names()):
