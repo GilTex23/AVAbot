@@ -5,7 +5,7 @@ import { Badge } from "../components/ui/badge";
 import { Button } from "../components/ui/button";
 import { Card } from "../components/ui/card";
 import { LazyImage } from "../components/ui/LazyImage";
-import { YummySearch } from "../components/YummySearch";
+import { ClampedTitle } from "../components/ClampedTitle";
 import { deleteSubscription, getSubscriptions } from "../services/api";
 import type { SubscriptionItem } from "../lib/types";
 import { hapticNotification } from "../lib/telegram";
@@ -20,7 +20,6 @@ export function Subscriptions({ refreshKey }: SubscriptionsProps) {
   const [loading, setLoading] = useState(true);
   const [pendingDeleteId, setPendingDeleteId] = useState<number | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
-  const [reloadKey, setReloadKey] = useState(0);
 
   useEffect(() => {
     let cancelled = false;
@@ -45,7 +44,7 @@ export function Subscriptions({ refreshKey }: SubscriptionsProps) {
     return () => {
       cancelled = true;
     };
-  }, [refreshKey, reloadKey]);
+  }, [refreshKey]);
 
   async function removeSubscription(id: number) {
     setPendingDeleteId(id);
@@ -72,8 +71,6 @@ export function Subscriptions({ refreshKey }: SubscriptionsProps) {
 
       {notice ? <div className="notice">{notice}</div> : null}
 
-      <YummySearch subscriptions={items} onSubscribed={() => setReloadKey((value) => value + 1)} />
-
       <div className="compact-list">
         {loading ? (
           <Card className="empty-state">
@@ -85,7 +82,7 @@ export function Subscriptions({ refreshKey }: SubscriptionsProps) {
             <Card key={item.id} className="subscription-row">
               <LazyImage className="subscription-row__poster" src={item.poster_url || undefined} alt={item.title} />
               <div className="subscription-row__main">
-                <h2>{item.title}</h2>
+                <ClampedTitle title={item.title} />
                 <div className="subscription-row__meta">
                   <Badge tone="red">{item.voiceover}</Badge>
                   {item.source === "yummy" ? <Badge tone="muted">YummyAnime</Badge> : null}
@@ -113,7 +110,7 @@ export function Subscriptions({ refreshKey }: SubscriptionsProps) {
         )}
       </div>
 
-      {!loading && items.length === 0 ? <Card className="empty-state">Подписок пока нет. Добавьте тайтл из обновлений, расписания или найдите на YummyAnime.</Card> : null}
+      {!loading && items.length === 0 ? <Card className="empty-state">Подписок пока нет. Добавьте тайтл из обновлений или расписания — а в «Обновлениях» на вкладке YummyAnime есть поиск.</Card> : null}
     </div>
   );
 }

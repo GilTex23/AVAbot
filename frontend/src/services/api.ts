@@ -1,6 +1,8 @@
 import { getTelegramInitData } from "../lib/telegram";
 import type {
   AdminStats,
+  AdminUser,
+  AdminUserDetails,
   AnimeDetails,
   NewScraperKey,
   QuietHoursSettings,
@@ -219,6 +221,22 @@ export function deleteAdminKey(id: number): Promise<ScraperKeysOverview> {
 
 export function refreshAdminKeys(id?: number): Promise<ScraperKeysOverview> {
   return fetchJson(id ? `/api/miniapp/admin/keys/${id}/refresh` : "/api/miniapp/admin/keys/refresh", { method: "POST" });
+}
+
+export function getAdminUsers(query: string, offset: number, limit: number): Promise<{ total: number; offset: number; items: AdminUser[] }> {
+  const params = new URLSearchParams({ offset: String(offset), limit: String(limit) });
+  if (query) {
+    params.set("q", query);
+  }
+  return fetchJson(`/api/miniapp/admin/users?${params.toString()}`);
+}
+
+export function getAdminUser(id: number): Promise<AdminUserDetails> {
+  return fetchJson(`/api/miniapp/admin/users/${id}`);
+}
+
+export function deleteAdminSubscription(id: number): Promise<AdminUserDetails> {
+  return fetchJson(`/api/miniapp/admin/subscriptions/${id}`, { method: "DELETE" });
 }
 
 export function getAdminShikimori(): Promise<ShikimoriOverview> {

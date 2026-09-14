@@ -1,7 +1,8 @@
-import { ArrowLeft, BarChart3, Check, ChevronRight, KeyRound, Link2, ListChecks, Loader2, Pencil, Plus, RefreshCw, Trash2, X } from "lucide-react";
+import { ArrowLeft, BarChart3, Check, ChevronRight, KeyRound, Link2, ListChecks, Loader2, Pencil, Plus, RefreshCw, Trash2, Users, X } from "lucide-react";
 import { useCallback, useEffect, useState, type FormEvent } from "react";
 import { AdminShikimori } from "./AdminShikimori";
 import { AdminStats } from "./AdminStats";
+import { AdminUsers } from "./AdminUsers";
 import { describeAdminError } from "../lib/adminErrors";
 import { Badge } from "../components/ui/badge";
 import { Button } from "../components/ui/button";
@@ -95,9 +96,10 @@ function keyBadge(key: ScraperKey): { label: string; tone: Tone } {
 }
 
 export function Admin({ refreshKey, onBack }: AdminProps) {
-  const [view, setView] = useState<"main" | "stats" | "shikimori">("main");
+  const [view, setView] = useState<"main" | "stats" | "shikimori" | "users">("main");
   const openStats = useCallback(() => setView("stats"), []);
   const openShikimori = useCallback(() => setView("shikimori"), []);
+  const openUsers = useCallback(() => setView("users"), []);
   const closeView = useCallback(() => setView("main"), []);
 
   if (view === "stats") {
@@ -106,10 +108,15 @@ export function Admin({ refreshKey, onBack }: AdminProps) {
   if (view === "shikimori") {
     return <AdminShikimori refreshKey={refreshKey} onBack={closeView} />;
   }
-  return <AdminMain refreshKey={refreshKey} onBack={onBack} onOpenStats={openStats} onOpenShikimori={openShikimori} />;
+  if (view === "users") {
+    return <AdminUsers refreshKey={refreshKey} onBack={closeView} />;
+  }
+  return <AdminMain refreshKey={refreshKey} onBack={onBack} onOpenStats={openStats} onOpenShikimori={openShikimori} onOpenUsers={openUsers} />;
 }
 
-function AdminMain({ refreshKey, onBack, onOpenStats, onOpenShikimori }: AdminProps & { onOpenStats: () => void; onOpenShikimori: () => void }) {
+type AdminMainProps = AdminProps & { onOpenStats: () => void; onOpenShikimori: () => void; onOpenUsers: () => void };
+
+function AdminMain({ refreshKey, onBack, onOpenStats, onOpenShikimori, onOpenUsers }: AdminMainProps) {
   const [data, setData] = useState<ScraperKeysOverview | null>(null);
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState<string | null>(null);
@@ -202,6 +209,17 @@ function AdminMain({ refreshKey, onBack, onOpenStats, onOpenShikimori }: AdminPr
           <span className="settings-link__text">
             <span className="settings-link__title">Статистика</span>
             <span className="settings-link__caption">Запросы и ключи, бот, база данных и сервер — с графиками</span>
+          </span>
+        </span>
+        <ChevronRight size={20} />
+      </button>
+
+      <button type="button" className="card settings-card settings-link" onClick={onOpenUsers}>
+        <span className="settings-card__head">
+          <Users size={22} />
+          <span className="settings-link__text">
+            <span className="settings-link__title">Пользователи</span>
+            <span className="settings-link__caption">Кто пользуется ботом, настройки и подписки каждого</span>
           </span>
         </span>
         <ChevronRight size={20} />

@@ -120,6 +120,8 @@ button {
 
 .page-stack {
   display: grid;
+  /* Колонка не шире экрана: иначе длинная строка (подпись, название) раздвигает всю страницу */
+  grid-template-columns: minmax(0, 1fr);
   gap: 18px;
 }
 
@@ -129,6 +131,29 @@ button {
   align-items: flex-end;
   justify-content: space-between;
   gap: 16px;
+}
+
+/* Подпись фильтра переносится под заголовок и сокращается, а не растягивает страницу */
+.hero-panel {
+  flex-wrap: wrap;
+  gap: 10px 16px;
+}
+
+.hero-panel > div {
+  flex: 1 1 220px;
+  min-width: 0;
+}
+
+.hero-panel__badge {
+  max-width: 100%;
+  min-width: 0;
+}
+
+.badge__text {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .hero-panel h1,
@@ -335,7 +360,9 @@ button {
 .studio-pill {
   display: inline-flex;
   align-items: center;
+  max-width: 100%;
   min-height: 24px;
+  overflow-wrap: anywhere;
   border: 1px solid rgba(255, 92, 87, 0.48);
   border-radius: 5px;
   padding: 0 8px;
@@ -425,6 +452,30 @@ button {
 .subscription-row__actions {
   display: flex;
   gap: 6px;
+}
+
+/* Длинная озвучка в карточке подписки переносится внутри бейджа */
+.subscription-row__meta .badge {
+  justify-content: flex-start;
+  white-space: normal;
+  overflow-wrap: anywhere;
+  text-align: left;
+  line-height: 1.25;
+  padding-block: 3px;
+}
+
+.clamped-title {
+  display: -webkit-box;
+  overflow: hidden;
+  overflow-wrap: anywhere;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 3;
+  cursor: pointer;
+}
+
+.clamped-title--expanded {
+  display: block;
+  -webkit-line-clamp: unset;
 }
 
 .subscription-forecast {
@@ -647,6 +698,7 @@ button {
   align-items: center;
   justify-content: center;
   gap: 5px;
+  max-width: 100%;
   min-height: 24px;
   border-radius: 5px;
   padding: 0 8px;
@@ -862,6 +914,87 @@ input[type="time"].input::-webkit-calendar-picker-indicator {
   align-items: flex-start;
   justify-content: space-between;
   gap: 12px;
+}
+
+.schedule-row h2 {
+  display: -webkit-box;
+  overflow: hidden;
+  overflow-wrap: anywhere;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 3;
+}
+
+.admin-user-row {
+  display: grid;
+  grid-template-columns: 40px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 12px;
+  width: 100%;
+  padding: 10px 12px;
+  color: var(--text);
+  text-align: left;
+}
+
+.admin-user-row__avatar {
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  object-fit: cover;
+  color: var(--soft);
+}
+
+svg.admin-user-row__avatar {
+  padding: 9px;
+  background: var(--surface-soft);
+}
+
+.admin-user-row__body {
+  display: grid;
+  gap: 3px;
+  min-width: 0;
+}
+
+.admin-user-row__name {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  font-size: 15px;
+  font-weight: 750;
+  overflow-wrap: anywhere;
+}
+
+.admin-user-row .muted-copy {
+  margin: 0;
+  font-size: 12px;
+}
+
+.admin-stat__text {
+  font-size: 15px !important;
+  line-height: 1.3;
+}
+
+.admin-user-facts {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  gap: 6px 12px;
+  margin: 12px 0 0;
+  font-size: 13px;
+}
+
+.admin-user-facts dt {
+  color: var(--soft);
+}
+
+.admin-user-facts dd {
+  margin: 0;
+  color: var(--text);
+  overflow-wrap: anywhere;
+}
+
+.admin-user-sub__hint {
+  margin-top: 6px;
+  font-size: 12px;
 }
 
 .shiki-summary {
@@ -1757,9 +1890,18 @@ input[type="time"].input::-webkit-calendar-picker-indicator {
     font-size: 20px;
   }
 
+  /* Кнопки — строкой под карточкой: название получает всю ширину */
   .subscription-row {
-    grid-template-columns: 46px minmax(0, 1fr) auto;
+    grid-template-columns: 46px minmax(0, 1fr);
     gap: 10px;
+    align-items: start;
+  }
+
+  .subscription-row__actions {
+    grid-column: 1 / -1;
+    justify-content: flex-end;
+    border-top: 1px solid var(--border);
+    padding-top: 6px;
   }
 
   .subscription-row__poster {

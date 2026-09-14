@@ -4,6 +4,7 @@ import { Badge } from "../components/ui/badge";
 import { Button } from "../components/ui/button";
 import { Card } from "../components/ui/card";
 import { LazyImage } from "../components/ui/LazyImage";
+import { YummySearch } from "../components/YummySearch";
 import { addSubscription, errorText, getSubscriptions, getUpdates } from "../services/api";
 import type { SourceId, SubscriptionItem, UpdateItem, UpdatesResponse } from "../lib/types";
 import { buildSubscriptionIndex, subscriptionKey } from "../lib/subscriptions";
@@ -25,6 +26,7 @@ export function Updates({ favoriteVoiceovers, refreshKey }: UpdatesProps) {
   const [loading, setLoading] = useState(true);
   const [pendingLink, setPendingLink] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
+  const [reloadKey, setReloadKey] = useState(0);
   const subscriptionIndex = useMemo(() => buildSubscriptionIndex(subscriptions), [subscriptions]);
   const hasFavorites = favoriteVoiceovers.length > 0;
   const showsAll = selectedVoiceover === ALL_VOICEOVERS || (selectedVoiceover === null && !hasFavorites);
@@ -62,7 +64,7 @@ export function Updates({ favoriteVoiceovers, refreshKey }: UpdatesProps) {
     return () => {
       cancelled = true;
     };
-  }, [selectedVoiceover, source, refreshKey]);
+  }, [selectedVoiceover, source, refreshKey, reloadKey]);
 
   async function subscribe(item: UpdateItem) {
     const key = subscriptionKey(item.link, item.studio);
@@ -104,7 +106,9 @@ export function Updates({ favoriteVoiceovers, refreshKey }: UpdatesProps) {
           <h1>Свежие серии</h1>
           <p>Постеры, озвучки и быстрый переход к тайтлу в одном экране.</p>
         </div>
-        <Badge tone="red">{selectedLabel}</Badge>
+        <Badge tone="red" className="hero-panel__badge">
+          <span className="badge__text">{selectedLabel}</span>
+        </Badge>
       </section>
 
       {notice ? <div className="notice">{notice}</div> : null}
@@ -127,6 +131,8 @@ export function Updates({ favoriteVoiceovers, refreshKey }: UpdatesProps) {
           </button>
         ))}
       </div>
+
+      {source === "yummy" ? <YummySearch subscriptions={subscriptions} onSubscribed={() => setReloadKey((value) => value + 1)} /> : null}
 
       <div className="chip-row" aria-label="Фильтр озвучки">
         {hasFavorites ? (
@@ -167,7 +173,9 @@ export function Updates({ favoriteVoiceovers, refreshKey }: UpdatesProps) {
                 <div className="anime-row__body">
                   <div className="anime-row__meta">
                     <Badge tone="green">{item.episode}</Badge>
-                    <span className="studio-pill">{item.studio}</span>
+                    <span className="studio-pill" title={item.studio}>
+                      {item.studio}
+                    </span>
                     {isSubscribed ? <span className="subscribed-mark">В подписках</span> : null}
                   </div>
                   <h2>{item.title}</h2>

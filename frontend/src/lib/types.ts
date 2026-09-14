@@ -42,6 +42,38 @@ export type YummyTitleDetails = YummyTitle & {
   voiceovers: Array<{ name: string; last_episode: number; updated_at: string }>;
 };
 
+export type AdminUser = {
+  id: number;
+  username?: string | null;
+  photo_url?: string | null;
+  registered_at?: string | null;
+  /** День последней активности в UTC: «2026-09-14» */
+  last_active?: string | null;
+  subscriptions: number;
+  yummy_subscriptions: number;
+  favorite_voiceovers: string[];
+  timezone: string;
+  quiet_hours: { enabled: boolean; start: string; end: string };
+  is_admin: boolean;
+};
+
+export type AdminUserDetails = AdminUser & {
+  active_days: number;
+  activity_days: number;
+  activity_sources: string[];
+  subscriptions_list: Array<{
+    id: number;
+    title: string;
+    link: string;
+    poster_url?: string | null;
+    voiceover: string;
+    source: SourceId;
+    last_episode?: string | null;
+    total_episodes?: number | null;
+    last_episode_at?: string | null;
+  }>;
+};
+
 export type ShikimoriTitleStatus = "pending" | "matched" | "manual" | "not_found" | "ambiguous" | "absent" | "error";
 
 export type ShikimoriCandidate = {

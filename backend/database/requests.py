@@ -392,6 +392,66 @@ async def get_user_subscriptions(tg_id: int):
         return result.scalars().all()
 
 
+# --- ADMIN: USERS ---
+async def get_admin_users(query: str | None, offset: int, limit: int) -> tuple[int, list[dict]]:
+    """
+    Пользователи для админки: число подписок по источникам и последний день активности.
+    query — часть username или точный Telegram ID. Сначала недавно активные, потом недавно зарегистрированные
+    """
+    subscriptions = (
+        select(
+            Subscription.user_id,
+            func.count(Subscription.id).label("total"),
+            func.count(Subscription.id).filter(Subscription.source == "yummy").label("yummy"),
+        )
+        .group_by(Subscription.user_id)
+        .subquery()
+    )
+    activity = (
+        select(UserActivity.user_id, func.max(UserActivity.day).label("last_active"))
+        .group_by(UserActivity.user_id)
+        .subquery()
+    )
+    filters = []
+    text_query = (query or "").strip().lstrip("@")
+    if text_query:
+        condition = User.username.ilike(f"%{text_query}%")
+        if text_query.isdigit():
+            condition = condition | (User.id == int(text_query))
+        filters.append(condition)
+
+    async with async_session() as session:
+        total = await session.scalar(select(func.count(User.id)).where(*filters))
+        rows = await session.execute(
+            select(User, func.coalesce(subscriptions.c.total, 0), func.coalesce(subscriptions.c.yummy, 0), activity.c.last_active)
+            .outerjoin(subscriptions, subscriptions.c.user_id == User.id)
+            .outerjoin(activity, activity.c.user_id == User.id)
+            .where(*filters)
+            .order_by(activity.c.last_active.desc().nulls_last(), User.registered_at.desc().nulls_last(), User.id)
+            .offset(offset)
+            .limit(limit)
+        )
+        return total or 0, [
+            {"user": user, "subscriptions": count, "yummy_subscriptions": yummy_count, "last_active": last_active}
+            for user, count, yummy_count, last_active in rows.all()
+        ]
+
+
+async def get_user_activity(tg_id: int, since: datetime.date) -> list[tuple[datetime.date, str]]:
+    async with async_session() as session:
+        result = await session.execute(
+            select(UserActivity.day, UserActivity.source)
+            .where(UserActivity.user_id == tg_id, UserActivity.day >= since)
+            .order_by(UserActivity.day.desc(), UserActivity.source)
+        )
+        return list(result.all())
+
+
+async def get_subscription(sub_id: int):
+    async with async_session() as session:
+        return await session.get(Subscription, sub_id)
+
+
 async def delete_subscription(sub_id: int):
     async with async_session() as session:
         await session.execute(delete(Subscription).where(Subscription.id == sub_id))

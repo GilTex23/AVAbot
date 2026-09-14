@@ -325,3 +325,87 @@ async def run_shikimori_sync(_: dict = Depends(require_admin)):
     _background_tasks.add(task)
     task.add_done_callback(_background_tasks.discard)
     return {"started": True}
+
+
+# --- ПОЛЬЗОВАТЕЛИ ---
+USERS_PAGE_LIMIT = 50
+ACTIVITY_DAYS = 30
+
+
+def _serialize_admin_user(user, subscriptions: int, yummy_subscriptions: int, last_active) -> dict:
+    return {
+        "id": user.id,
+        "username": user.username,
+        "photo_url": user.photo_url,
+        "registered_at": _iso(user.registered_at),
+        "last_active": last_active.isoformat() if last_active else None,
+        "subscriptions": subscriptions,
+        "yummy_subscriptions": yummy_subscriptions,
+        "favorite_voiceovers": list(user.favorite_voiceovers or []),
+        "timezone": user.quiet_timezone,
+        "quiet_hours": {"enabled": user.quiet_hours_enabled, "start": user.quiet_hours_start, "end": user.quiet_hours_end},
+        "is_admin": user.id in config.ADMIN_IDS,
+    }
+
+
+@router.get("/users")
+async def get_users(q: str | None = None, offset: int = 0, limit: int = USERS_PAGE_LIMIT, _: dict = Depends(require_admin)):
+    """Пользователи: поиск по username или Telegram ID, постранично"""
+    limit = min(max(limit, 1), USERS_PAGE_LIMIT)
+    total, rows = await db.get_admin_users(q, max(offset, 0), limit)
+    return {
+        "total": total,
+        "offset": max(offset, 0),
+        "items": [
+            _serialize_admin_user(row["user"], row["subscriptions"], row["yummy_subscriptions"], row["last_active"])
+            for row in rows
+        ],
+    }
+
+
+async def _user_details(user_id: int) -> dict:
+    user = await db.get_user(user_id)
+    if user is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Пользователь не найден")
+    subscriptions = sorted(await db.get_user_subscriptions(user_id), key=lambda sub: sub.anime_title.lower())
+    activity = await db.get_user_activity(user_id, datetime.datetime.utcnow().date() - datetime.timedelta(days=ACTIVITY_DAYS))
+    days = sorted({day for day, _ in activity}, reverse=True)
+    return {
+        **_serialize_admin_user(
+            user, len(subscriptions), sum(sub.source == "yummy" for sub in subscriptions), days[0] if days else None,
+        ),
+        "active_days": len(days),
+        "activity_sources": sorted({source for _, source in activity}),
+        "activity_days": ACTIVITY_DAYS,
+        "subscriptions_list": [
+            {
+                "id": sub.id,
+                "title": sub.anime_title,
+                "link": sub.anime_url,
+                "poster_url": sub.poster_url,
+                "voiceover": sub.voiceover,
+                "source": sub.source,
+                "last_episode": sub.last_episode,
+                "total_episodes": sub.total_episodes,
+                "last_episode_at": _iso(sub.last_episode_at),
+            }
+            for sub in subscriptions
+        ],
+    }
+
+
+@router.get("/users/{user_id}")
+async def get_user_details(user_id: int, _: dict = Depends(require_admin)):
+    """Пользователь, его настройки, активность за ACTIVITY_DAYS дней и подписки"""
+    return await _user_details(user_id)
+
+
+@router.delete("/subscriptions/{subscription_id}")
+async def delete_user_subscription(subscription_id: int, _: dict = Depends(require_admin)):
+    """Удалить подписку пользователя; возвращает обновлённую карточку пользователя"""
+    sub = await db.get_subscription(subscription_id)
+    if sub is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Подписка не найдена")
+    await db.delete_subscription(subscription_id)
+    await stats.increment("subscriptions.deleted", stats.SOURCE_ADMIN)
+    return await _user_details(sub.user_id)
